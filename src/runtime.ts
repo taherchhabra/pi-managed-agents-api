@@ -18,6 +18,10 @@ export type RuntimeFactory = (job: Job, hooks: RuntimeHooks) => Promise<Runtime>
 export interface PiOptions {
   keys: Partial<Record<AgentConfig['provider'], string>>;
   maxTurns?: number;
+  maxOutputTokens?: number;
+  // Trusted observation/admission hook before a model payload leaves the worker.
+  // Throwing refuses the request. Payloads and credentials are never passed here.
+  beforeModelRequest?: (request: { runId: string; provider: string; model: string }) => void;
   // Trusted dependency injection for contract tests. Never exposed through HTTP.
   configureModelRuntime?: (runtime: ModelRuntime) => Promise<void>;
 }
@@ -64,6 +68,8 @@ const definitions = {
 };
 
 export function piRuntime(options: PiOptions): RuntimeFactory {
+  if (options.maxTurns !== undefined && (!Number.isInteger(options.maxTurns) || options.maxTurns < 1)) throw new Error('maxTurns must be a positive integer');
+  if (options.maxOutputTokens !== undefined && (!Number.isInteger(options.maxOutputTokens) || options.maxOutputTokens < 1)) throw new Error('maxOutputTokens must be a positive integer');
   return async (job, hooks) => {
     hooks.signal.throwIfAborted();
     const key = options.keys[job.config.provider];
@@ -114,14 +120,29 @@ export function piRuntime(options: PiOptions): RuntimeFactory {
       });
       session.agent.toolExecution = 'sequential';
       abort = () => session.agent.abort();
+      let modelRequests = 0;
+      session.agent.onPayload = (payload, requestedModel) => {
+        try {
+          hooks.signal.throwIfAborted();
+          if (++modelRequests > (options.maxTurns ?? 32)) throw new Error('Run exceeded its model-request budget');
+          let boundedPayload = payload;
+          if (options.maxOutputTokens !== undefined) {
+            if (!payload || typeof payload !== 'object') throw new Error('Cannot apply output-token limit to this request');
+            const body = { ...payload } as Record<string, unknown>;
+            const field = requestedModel.api === 'openai-responses' ? 'max_output_tokens'
+              : 'max_completion_tokens' in body ? 'max_completion_tokens' : 'max_tokens';
+            const existing = typeof body[field] === 'number' ? body[field] : options.maxOutputTokens;
+            body[field] = Math.min(existing, options.maxOutputTokens);
+            boundedPayload = body;
+          }
+          options.beforeModelRequest?.({ runId: job.id, provider: requestedModel.provider, model: requestedModel.id });
+          return boundedPayload;
+        } catch (error) { fatal = error; abort(); throw error; }
+      };
       const before = session.getSessionStats();
-      let turns = 0;
       let settled = false;
       const unsubscribe = session.subscribe(event => {
         if (event.type === 'agent_settled') settled = true;
-        if (event.type === 'message_end' && event.message.role === 'assistant' && ++turns > (options.maxTurns ?? 32)) {
-          fatal = new Error('Run exceeded its model-turn budget'); abort();
-        }
       });
       hooks.signal.addEventListener('abort', abort, { once: true });
       return {

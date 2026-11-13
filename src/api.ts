@@ -12,7 +12,7 @@ declare module 'fastify' { interface FastifyRequest { tenant: string } }
 const object = (properties: Record<string, any>) => Type.Object(properties, { additionalProperties: false });
 const name = Type.String({ minLength: 1, maxLength: 200 });
 const id = Type.String({ pattern: '^[a-z]+_[0-9a-f-]{36}$', maxLength: 50 });
-const config = object({ provider: Type.Union([Type.Literal('openai'), Type.Literal('anthropic')]),
+const config = object({ provider: Type.Union([Type.Literal('openai'), Type.Literal('anthropic'), Type.Literal('openrouter')]),
   model: Type.String({ minLength: 1, maxLength: 200 }), instructions: Type.String({ maxLength: 32_768 }),
   tools: Type.Array(Type.Union([Type.Literal('bash'), Type.Literal('read_file'), Type.Literal('write_file')]), { uniqueItems: true, maxItems: 3 }) });
 const sessionParams = object({ session: id });

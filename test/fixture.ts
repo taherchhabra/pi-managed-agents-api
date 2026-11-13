@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import pg from 'pg';
 import { buildApi } from '../src/api.js';
 import { ArtifactStore } from '../src/artifacts.js';
-import { piRuntime } from '../src/runtime.js';
+import { piRuntime, type PiOptions } from '../src/runtime.js';
 import { DockerSandboxProvider } from '../src/sandbox.js';
 import { Store } from '../src/store.js';
 
@@ -57,7 +57,7 @@ export async function fixture() {
 
 // A real HTTP/SSE provider fixture: Pi still parses the model stream, validates
 // tool arguments, invokes tools, updates SessionManager and settles its loop.
-export async function modelFixture() {
+export async function modelFixture(options: Pick<PiOptions, 'maxTurns' | 'maxOutputTokens' | 'beforeModelRequest'> = {}) {
   const requests: any[] = [];
   const server = createServer(async (request, response) => {
     try {
@@ -118,7 +118,7 @@ export async function modelFixture() {
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No fixture port');
-  const runtime = piRuntime({ keys: { openai: 'fixture-only-key' }, configureModelRuntime: async modelRuntime => {
+  const runtime = piRuntime({ ...options, keys: { openai: 'fixture-only-key' }, configureModelRuntime: async modelRuntime => {
     modelRuntime.registerProvider('openai', { api: 'openai-completions', baseUrl: `http://127.0.0.1:${address.port}/v1`, apiKey: 'fixture-only-key',
       models: [{ id: 'gpt-4.1-mini', name: 'Test model', api: 'openai-completions', reasoning: false, input: ['text'],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100_000, maxTokens: 1024 }] });

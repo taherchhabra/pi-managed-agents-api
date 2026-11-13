@@ -6,7 +6,7 @@ Implementation baseline: 14 November 2026. This document describes the current c
 
 Run on one Linux Docker host with PostgreSQL and a persistent artifact directory. `ROLE=all` starts API and worker together. `ROLE=api` and `ROLE=worker` separate them into processes, but workers must share the same Docker daemon and artifact storage. Each worker processes one run at a time. Multiple workers coordinate through PostgreSQL session locks and leases.
 
-The default API bind address is `127.0.0.1:8080`. Authentication uses the operator's `API_KEYS` JSON object, mapping bearer tokens to tenant IDs; every key for a tenant has equal access. The worker uses server-level OpenAI or Anthropic credentials. The MVP has no per-user identity or per-tenant provider credential vault.
+The default API bind address is `127.0.0.1:8080`. Authentication uses the operator's `API_KEYS` JSON object, mapping bearer tokens to tenant IDs; every key for a tenant has equal access. The worker uses server-level OpenAI, Anthropic, or OpenRouter credentials. The MVP has no per-user identity or per-tenant provider credential vault.
 
 `docker compose up -d --wait` starts only development PostgreSQL on loopback port 55432. The API and worker run through Node. The database credentials in Compose are local development values. `npm run migrate` applies the same migration as startup. Migrations are serialized by a PostgreSQL advisory lock.
 
@@ -31,6 +31,8 @@ Create an agent with `POST /v1/agents`:
 ```
 
 The response contains `latest_version.id`. A new revision uses `POST /v1/agents/:id/versions` with the configuration object alone. Existing sessions keep their original version.
+
+For OpenRouter, set `provider` to `openrouter`, use a namespaced model ID such as `openai/gpt-4.1-mini`, and configure `OPENROUTER_API_KEY` on the worker. Pi supplies the built-in OpenRouter transport and catalog; the API does not accept custom provider URLs. See [live testing](live-testing.md) for the verified path.
 
 Create an environment with `POST /v1/environment-templates`:
 
@@ -78,7 +80,7 @@ Usage is the difference in Pi session statistics across a successful run. It inc
 | Worker concurrency | One run per worker, one active run per session |
 | Lease / renewal | 30 seconds / 5 seconds |
 | Run duration | 5 minutes |
-| Agent turns / dispatched tools | 32 each |
+| Conversational model requests / dispatched tools | 32 each; request limit checked before sending |
 | Tool execution | Sequential |
 | Bash command | 30 seconds; returned output truncated at 64 KiB |
 | File read/write | 64 KiB UTF-8, paths confined to `/workspace` |
@@ -114,6 +116,10 @@ Events include `schema_version`, `id`, `seq`, `session_id`, `run_id`, `type`, `d
 SSE tails the PostgreSQL journal, so reconnecting has no notification-subscription gap. Delivery can repeat after reconnection; deduplicate by event ID. All events are retained, so expiry responses are not implemented. Streams include keepalives and respect backpressure. Disconnecting a stream never cancels work.
 
 Streaming currently covers durable lifecycle, tool, and result events. Token deltas and running shell-output previews are deferred.
+
+## Live acceptance testing
+
+`npm run test:live` exercises the production Pi adapter with real OpenRouter inference. The harness uses a separate schema, random tenant tokens, and its own artifact directory. Its tighter request, token, and time limits apply only to the acceptance run. The six scenarios, evidence format, and observed results are documented in [live-testing.md](live-testing.md).
 
 ## Remaining architecture work
 

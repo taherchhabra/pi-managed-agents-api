@@ -17,7 +17,7 @@ docker build -f Dockerfile.sandbox -t pi-managed-sandbox:dev .
 cp .env.example .env
 ```
 
-Edit `.env`: replace the bearer token in `API_KEYS` and set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. Tokens map to tenant IDs. Provider keys remain in the worker and are never passed into the sandbox.
+Edit `.env`: replace the bearer token in `API_KEYS` and set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENROUTER_API_KEY`. Tokens map to tenant IDs. Provider keys remain in the worker and are never passed into the sandbox.
 
 ```sh
 npm run dev
@@ -34,6 +34,20 @@ npm run example
 
 [The example](examples/run.mjs) creates an agent, environment, session, and run; watches durable SSE events; then prints the result and artifact download paths. It defaults to `openai/gpt-4.1-mini`; use `MODEL_PROVIDER=anthropic MODEL=claude-sonnet-4-5 npm run example` for Anthropic. The selected model must exist in Pi's pinned catalog. These calls use your configured provider account.
 
+For OpenRouter, use `MODEL_PROVIDER=openrouter MODEL=openai/gpt-4.1-mini npm run example`.
+
+## Test with a real model
+
+Set `OPENROUTER_API_KEY` in the ignored `.env` file, start PostgreSQL, and build the sandbox image as above. Then run:
+
+```sh
+npm run test:live
+```
+
+The live harness starts an isolated API and worker, calls OpenRouter through the production Pi adapter, and verifies actual model responses, tool execution, artifact contents, persisted conversation/workspace state, SSE replay, tenant isolation, and cancellation. It uses no model fixtures and fails if the key is missing. No separately running API or `API_TOKEN` is needed.
+
+It defaults to `openai/gpt-4.1-mini` (`LIVE_MODEL` overrides it), limits requests and output tokens, saves local evidence under `.data/live-tests/`, and removes its database schema and sandbox volumes afterward. This opt-in command uses provider credits and is separate from ordinary CI. [Live test contract and observed results](docs/live-testing.md).
+
 ## Verify without model credentials
 
 With PostgreSQL and the sandbox image available:
@@ -45,7 +59,7 @@ npm run build
 
 Tests use the **real Pi SDK** with a local HTTP/SSE model fixture, real PostgreSQL schemas, and real Docker containers. No provider key or paid model call is needed. Each test creates and drops a separate database schema and removes its sandbox volumes. Set `TEST_DATABASE_URL` to use another PostgreSQL instance where the test user can create schemas.
 
-The tests cover concurrent admission, tenant isolation, ownership fencing, recovery, checkpoint branches and compaction records, conversation restoration, tool errors, cancellation during generation and shell execution, SSE reconnection, artifact downloads, and injected persistence/publication failures. Live OpenAI/Anthropic inference has not been verified in this environment.
+The tests cover concurrent admission, tenant isolation, ownership fencing, recovery, checkpoint branches and compaction records, conversation restoration, tool errors, cancellation during generation and shell execution, SSE reconnection, artifact downloads, injected persistence/publication failures, and model-request/token limits. A separate live run through OpenRouter passed all six acceptance checks; direct OpenAI/Anthropic inference remains unverified.
 
 ## API
 

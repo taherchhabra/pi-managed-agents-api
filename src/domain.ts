@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 export const SDK_VERSION = '1.5.2';
 export type ToolName = 'bash' | 'read_file' | 'write_file';
 export interface AgentConfig {
-  provider: 'openai' | 'anthropic';
+  provider: 'openai' | 'anthropic' | 'openrouter';
   model: string;
   instructions: string;
   tools: ToolName[];

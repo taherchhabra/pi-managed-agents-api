@@ -27,5 +27,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return { databaseUrl: env.DATABASE_URL, apiKeys, host: env.HOST ?? '127.0.0.1', port,
     role: role as Config['role'], artifactDir: resolve(env.ARTIFACT_DIR ?? '.data/artifacts'),
     sandboxImage: env.SANDBOX_IMAGE ?? 'pi-managed-sandbox:dev',
-    providerKeys: { openai: env.OPENAI_API_KEY, anthropic: env.ANTHROPIC_API_KEY } };
+    providerKeys: { openai: env.OPENAI_API_KEY, anthropic: env.ANTHROPIC_API_KEY, openrouter: env.OPENROUTER_API_KEY } };
 }

@@ -14,6 +14,7 @@
     "example": "node --env-file-if-exists=.env examples/run.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
+    "test:live": "node --env-file-if-exists=.env --import tsx harness/live.ts",
     "check": "npm run typecheck && npm test"
   },
   "dependencies": {
