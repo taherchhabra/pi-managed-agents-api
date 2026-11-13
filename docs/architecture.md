@@ -1,6 +1,6 @@
 # Pi Managed Agents API architecture proposal
 
-Status: proposed design, 13 November 2026. Implementation and failure testing remain to be done.
+Status: architecture target, 13 November 2026. An initial vertical slice is implemented and tested; see [the MVP contract](mvp.md) for its supported surface and recovery limits. The rest of this document includes planned capabilities.
 
 Build a session service around Pi, with the agent harness running separately from generated code. Use a native API inspired by the documented OpenAI and Claude contracts in [the provider comparison](provider-architecture.md). Keep provider compatibility behind later adapters so differences in events, approvals, and completion remain explicit.
 
@@ -10,7 +10,7 @@ The initial scope is a hosted API with multiple tenants, one region, asynchronou
 
 **Use the Pi coding agent SDK as the harness.** Embed `@earendil-works/pi-coding-agent` in a session worker through `createAgentSession()`. Pi supplies the model/tool loop, conversation handling, compaction, steering, and runtime events. The service supplies durable command acceptance, checkpoints, worker ownership, tool reconciliation, and public API state. [Pi SDK](https://github.com/earendil-works/pi/blob/4be4cb4f5e9c64bf730ee2036ebac2ce9f97a6cf/packages/coding-agent/docs/sdk.md).
 
-Pin the SDK and platform extension bundle for each session. The documentation baseline is upstream commit `4be4cb4f5e9c64bf730ee2036ebac2ce9f97a6cf`; no dependency has been installed or tested. Use explicit model, resource-loader, tool, settings, and session-manager configuration so a worker does not discover ambient user credentials or project extensions.
+Pin the SDK and platform extension bundle for each session. The documentation baseline is upstream commit `4be4cb4f5e9c64bf730ee2036ebac2ce9f97a6cf`; the MVP pins and tests SDK version `1.5.2`. Use explicit model, resource-loader, tool, settings, and session-manager configuration so a worker does not discover ambient user credentials or project extensions.
 
 `SessionManager` is authoritative for finalized model context. Restore its entry tree and active branch, including compaction and context edits, rather than assigning an array to the live agent's message state. SDK persistence does not provide the service's distributed recovery protocol. [Pi session format](https://github.com/earendil-works/pi/blob/4be4cb4f5e9c64bf730ee2036ebac2ce9f97a6cf/packages/coding-agent/docs/session-format.md).
 
