@@ -26,7 +26,7 @@ Open **http://127.0.0.1:5173**. Vite proxies API, authentication, and event-stre
 - **Inspector:** browse each run's persisted steps, expand tool arguments/results, inspect full event JSON, and search logs by event type or payload. The event stream reconnects from its last sequence, deduplicates replayed events, and displays connection state. Log export fetches the full server history, including pages not visible in the inspector.
 - **Artifacts:** preview text outputs and download immutable files from completed runs. Each successful run publishes a snapshot of `outputs/`, so an unchanged file can appear for several runs. Previews render file contents as text, including HTML and SVG.
 - **Connections:** inspect which server provider keys are configured and which models exist in the service catalog (Pi's pinned catalog plus service additions). Presence of a key is not proof of provider connectivity. A successful run verifies actual access. Provider secrets remain operator-managed.
-- **Documentation:** read the in-app getting-started walkthrough, API quickstart, core concepts, sandbox guide, run/log guide, and local setup. Search across the guides, copy prompts or code, and follow links directly into the console. Documentation is also accessible before sign-in at `#/docs/get-started`. The API quickstart displays the same `examples/run.mjs` source exercised by the integration suite.
+- **Documentation:** read the in-app getting-started walkthrough, API quickstart, remote app integration, core concepts, sandbox guide, run/log guide, local setup, and VPS deployment guide. Search across the guides, copy prompts or code, and follow links directly into the console. Documentation is also accessible before sign-in at `#/docs/get-started`. The API quickstart displays the same `examples/run.mjs` source exercised by the integration suite. The app integration page shows the current instance's API origin with a copy button.
 
 Archiving preserves history and published artifacts, prevents new runs, and releases the sandbox workspace. The UI explains that consequence before submitting the action. Pending runs must be cancelled or finished first.
 
@@ -44,7 +44,7 @@ For an HTTPS reverse proxy, set `CONSOLE_ORIGIN=https://agents.example.com` (no 
 
 `GET /v1/sessions/:id/runs` returns runs in `(created_at,id)` order, with up to 100 entries per page. Supply the previous `next_cursor` as `?after=<run-id>` until it becomes null. Cursor timestamps are compared inside PostgreSQL so sub-millisecond precision is preserved. A cursor belonging to another session or tenant is rejected.
 
-`GET /v1/capabilities` returns the three supported providers, their installed static model catalogs, `configured` booleans, sandbox image, and SDK version. It does not contact a provider or return a secret. Configuration flags describe the API process's environment; separately deployed workers must receive the same provider configuration.
+`GET /v1/capabilities` returns the three supported providers, their installed static model catalogs, `configured` booleans, sandbox image, and SDK version. It does not contact a provider or return a secret. In the VPS stack, the API receives only `OPENAI_CONFIGURED`, `ANTHROPIC_CONFIGURED`, and `OPENROUTER_CONFIGURED` flags; provider keys remain in the worker. The Compose file derives both from the same private deployment configuration.
 
 ## Scope and verification
 

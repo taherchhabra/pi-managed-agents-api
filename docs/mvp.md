@@ -10,6 +10,10 @@ The default API bind address is `127.0.0.1:8080`. Authentication uses the operat
 
 `docker compose up -d --wait` starts only development PostgreSQL on loopback port 55432. The API and worker run through Node. The database credentials in Compose are local development values. `npm run migrate` applies the same migration as startup. Migrations are serialized by a PostgreSQL advisory lock.
 
+For one-VPS hosting, `compose.vps.yaml` packages Caddy HTTPS, private PostgreSQL, a non-root API, and a separate non-root worker with the host Docker socket group. Only Caddy publishes ports. The API receives workspace tokens and provider configuration flags; only the worker receives provider keys and the Docker socket. The worker's socket access is host-level authority, so this is for a dedicated host and trusted operator. `scripts/vps.mjs` generates credentials, issues/revokes workspace keys, and manages the stack. The in-app **Self-host on a VPS** and **Connect your app** guides are the operator and integration documentation.
+
+The API defaults to 600 requests/minute/IP and the console login to 10/minute/IP, configurable through `RATE_LIMIT_MAX` and `LOGIN_RATE_LIMIT_MAX`. A `429` includes `Retry-After`. These are process-local traffic limits, not tenant spending quotas. Forwarding headers are untrusted by default; the supplied VPS gateway configures exactly one trusted hop and exposes no direct API port. Console sessions and rate counters do not span replicas. The deployment test verifies TLS, streaming, tenant isolation, container permissions, and persistence over service restarts; its opt-in live mode also verifies real model/tool execution and restored session state.
+
 `SANDBOX_IMAGE` is an operator setting, captured in environment templates. Use an image digest when you need immutable image content. A custom image must supply Python 3, Bash, `sleep`, UID/GID 10001, and a writable `/workspace` owned by that user. Model requests run outside the sandbox.
 
 ## Requests
@@ -123,6 +127,6 @@ Streaming currently covers durable lifecycle, tool, and result events. Token del
 
 ## Remaining architecture work
 
-Before public multi-tenant hosting: hardened remote executors and workspace snapshots, disk/concurrency/spend quotas, credential mediation, production authentication, TLS/deployment operations, retention and object cleanup, broader crash testing, and SDK/runtime upgrade procedures.
+Before public multi-tenant hosting: hardened remote executors and workspace snapshots, disk/concurrency/spend quotas, credential mediation, user identity and scoped authentication, high availability and disaster-recovery automation, retention and object cleanup, broader crash testing, and SDK/runtime upgrade procedures. The supplied one-VPS deployment includes TLS and manual backup/restore guidance, but does not establish those broader guarantees.
 
 Features still planned include steering, approvals, external tools, MCP, webhooks/outbox delivery, child threads, input uploads, session configuration updates, self-hosted executors, client SDKs, and OpenAI/Claude compatibility adapters. Their proposed routes in the architecture document are not implemented endpoints.

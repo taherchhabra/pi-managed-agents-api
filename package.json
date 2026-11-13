@@ -16,14 +16,17 @@
     "migrate": "node --env-file-if-exists=.env --import tsx src/migrate.ts",
     "example": "node --env-file-if-exists=.env examples/run.mjs",
     "typecheck": "tsc --noEmit && tsc -p ui/tsconfig.json --noEmit",
-    "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts test/*.test.mjs",
     "test:live": "node --env-file-if-exists=.env --import tsx harness/live.ts",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "test:deployment": "node scripts/test-deployment.mjs",
+    "test:deployment:live": "node --env-file-if-exists=.env scripts/test-deployment.mjs --live"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.5.2",
     "@earendil-works/pi-coding-agent": "1.5.2",
     "@fastify/cookie": "11.1.5",
+    "@fastify/rate-limit": "11.2.2",
     "@fastify/static": "10.1.11",
     "fastify": "5.12.8",
     "lucide-react": "1.72.0",

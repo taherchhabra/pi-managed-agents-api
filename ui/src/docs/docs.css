@@ -208,3 +208,8 @@
   .docs-code pre { padding: 14px; font-size: 10.5px; }
   .docs-footer { margin-top: 25px; font-size: 9px; }
 }
+.docs-endpoint { margin: 26px 0 34px; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.docs-endpoint > span { display: block; font-size: 12px; font-weight: 650; color: var(--muted); margin-bottom: 10px; }
+.docs-endpoint > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.docs-endpoint code { font-size: 14px; overflow-wrap: anywhere; }
+.docs-endpoint small { display: block; margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.6; }

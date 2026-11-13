@@ -1,0 +1,10 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$AGENTS_DOMAIN} {
+	# Caddy forwards SSE immediately based on Content-Type and propagates
+	# client disconnects. Keep the /v1 prefix and Authorization header.
+	reverse_proxy api:8080
+	header Strict-Transport-Security "max-age=31536000"
+}

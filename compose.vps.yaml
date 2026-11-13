@@ -1,0 +1,125 @@
+name: pi-agents
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      AGENTS_DOMAIN: ${AGENTS_DOMAIN:?Run the VPS init command first}
+      ACME_EMAIL: ${ACME_EMAIL:?Set an email for certificate notices}
+    ports:
+      - "${HTTP_BIND:-80}:80"
+      - "${HTTPS_BIND:-443}:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [frontend]
+    depends_on:
+      api: { condition: service_healthy }
+    logging: *logging
+    mem_limit: 256m
+
+  api:
+    image: ${API_IMAGE:-pi-managed-api:local}
+    build: { context: ., target: api }
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    environment:
+      ROLE: api
+      DATABASE_URL: postgres://pi:${POSTGRES_PASSWORD:?Run the VPS init command first}@db:5432/pi_agents
+      API_KEYS: ${API_KEYS:?Run the VPS init command first}
+      CONSOLE_ORIGIN: https://${AGENTS_DOMAIN}
+      TRUST_PROXY_HOPS: "1"
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-600}
+      LOGIN_RATE_LIMIT_MAX: ${LOGIN_RATE_LIMIT_MAX:-10}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-pi-managed-sandbox:dev}
+      OPENAI_CONFIGURED: ${OPENAI_API_KEY:+true}
+      ANTHROPIC_CONFIGURED: ${ANTHROPIC_API_KEY:+true}
+      OPENROUTER_CONFIGURED: ${OPENROUTER_API_KEY:+true}
+    volumes: [artifacts:/data/artifacts:ro]
+    networks: [frontend, backend]
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "deploy/health.mjs"]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 20s
+    stop_grace_period: 30s
+    logging: *logging
+    mem_limit: 512m
+    pids_limit: 128
+
+  worker:
+    image: ${WORKER_IMAGE:-pi-managed-worker:local}
+    build: { context: ., target: worker }
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    group_add: ["${DOCKER_GID:?Run the VPS init command on this host}"]
+    tmpfs: ["/tmp:size=256m,mode=1777"]
+    environment:
+      ROLE: worker
+      DATABASE_URL: postgres://pi:${POSTGRES_PASSWORD}@db:5432/pi_agents
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-pi-managed-sandbox:dev}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    volumes:
+      - artifacts:/data/artifacts
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [backend, egress]
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "deploy/health.mjs", "worker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 45s
+    logging: *logging
+    mem_limit: 768m
+    pids_limit: 256
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pi
+      POSTGRES_DB: pi_agents
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run the VPS init command first}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pi -d pi_agents"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+    mem_limit: 768m
+
+networks:
+  frontend:
+  backend:
+    internal: true
+  egress:
+volumes:
+  postgres-data:
+  artifacts:
+  caddy-data:
+  caddy-config:

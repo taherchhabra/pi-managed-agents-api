@@ -12,7 +12,7 @@ const href = (page: string, section?: string) =>
 function CodeSample({ value, language }: { value: string; language: string }) {
   const labels: Record<string, string> = {
     text: "Try this prompt", sh: "Terminal", js: "quickstart.mjs",
-    json: "JSON", dotenv: ".env",
+    json: "JSON", dotenv: "Environment variables", javascript: "JavaScript",
   };
   return (
     <div className={"docs-code" + (language === "text" ? " docs-prompt" : "")}>
@@ -127,6 +127,11 @@ export function Documentation({ route }: { route: string }) {
             <div className="docs-page-meta"><span>{page.id === "get-started" ? "YOUR FIRST AGENT" : page.group.toUpperCase()}</span><span><Clock3 size={13} />{page.minutes} read</span></div>
             <h1 tabIndex={-1} ref={heading}>{page.title}</h1>
             <p className="docs-lead">{page.description}</p>
+            {page.id === "connect-your-app" && <div className="docs-endpoint">
+              <span>This instance’s API origin</span>
+              <div><code>{window.location.origin}</code><CopyButton value={window.location.origin} label="Copy API origin" /></div>
+              <small>Append /v1 to call the API. Keep your workspace token in your app backend.</small>
+            </div>}
             {page.id === "get-started" && <>
               <div className="docs-intro-actions">
                 <a className="button primary" href="#/agents/new?starter=0">Create your first agent <ArrowRight size={15} /></a>

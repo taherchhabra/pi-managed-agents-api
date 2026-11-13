@@ -2584,6 +2584,7 @@ svg {
   line-height: 1.9;
   font-size: 13px;
 }
+.connection-guides { display: flex; flex-wrap: wrap; gap: 16px; }
 .setup-steps li {
   padding: 8px 0;
 }

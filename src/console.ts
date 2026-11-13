@@ -23,6 +23,7 @@ export function installConsole(
   app: FastifyInstance,
   apiKeys: Record<string, string>,
   origin?: string,
+  loginRateLimitMax = 10,
 ) {
   const keys = Object.entries(apiKeys).map(([key, tenant]) => ({
     hash: digest(key),
@@ -105,6 +106,7 @@ export function installConsole(
   app.post(
     "/console/login",
     {
+      config: { rateLimit: { max: loginRateLimitMax, timeWindow: 60_000 } },
       schema: {
         body: Type.Object(
           { token: Type.String({ minLength: 24, maxLength: 4096 }) },

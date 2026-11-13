@@ -224,7 +224,7 @@ function Console({
           </span>
           <span>
             <strong>{tenant}</strong>
-            <small>Local workspace</small>
+            <small>Agent workspace</small>
           </span>
           <Layers3 size={15} />
         </div>

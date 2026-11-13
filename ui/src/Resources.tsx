@@ -369,8 +369,8 @@ export function Connections({ caps }: { caps: Capabilities }) {
         >
           <ol className="setup-steps">
             <li>
-              Add <code>{selected.toUpperCase()}_API_KEY</code> to your local{" "}
-              <code>.env</code> or deployment secret store.
+              Add <code>{selected.toUpperCase()}_API_KEY</code> to the server’s{" "}
+              <code>.env.vps</code> for VPS hosting, or <code>.env</code> for local development.
             </li>
             <li>
               Restart the API and worker so they receive the updated
@@ -388,7 +388,10 @@ export function Connections({ caps }: { caps: Capabilities }) {
               verifies that the key and model work.
             </span>
           </div>
-          <DocLink page="local-setup">Local setup guide</DocLink>
+          <div className="connection-guides">
+            <DocLink page="self-hosting?section=configure">VPS setup guide</DocLink>
+            <DocLink page="local-setup">Local setup guide</DocLink>
+          </div>
         </Modal>
       )}
     </div>

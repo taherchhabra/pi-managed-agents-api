@@ -4,7 +4,25 @@ A working MVP of a managed agents API built on the **Pi coding agent SDK**. Type
 
 It implements immutable agent versions, tenant-scoped sessions, asynchronous runs, idempotent admission, a leased worker, persistent Pi checkpoints, Docker tools, replayable SSE events, cancellation, and downloadable artifacts. A browser console lets you build agents, test real sessions, and inspect runs, tool calls, event logs, and artifacts. The API is native to this project; provider compatibility adapters are future work.
 
-This is a development MVP for a trusted operator on one Docker host. The [MVP contract](docs/mvp.md) describes recovery behavior, tested guarantees, and the remaining work before public multi-tenant hosting.
+This MVP supports self-hosting for a trusted operator on one Linux VPS. Apps on other servers call its HTTPS API with workspace tokens. The [MVP contract](docs/mvp.md) describes recovery behavior, tested guarantees, and the remaining work before public multi-tenant hosting.
+
+## Self-host on a VPS
+
+Install Docker Engine with Compose, Git, and Node.js 22.19+. Point a domain at the VPS and allow TCP 80/443. From the checkout:
+
+```sh
+node scripts/vps.mjs init agents.example.com you@example.com
+# Edit .env.vps and add a model provider key.
+node scripts/vps.mjs up
+```
+
+The helper generates private credentials and starts Caddy HTTPS, a private PostgreSQL database, the API/console, and a separate Pi worker. Only the worker receives model provider keys and Docker socket access. Session workspaces, artifacts, database state, and certificates persist in Docker volumes. Use the generated workspace token in `.env.vps` to sign in.
+
+Open **Documentation → Self-host on a VPS** on your running instance (`/#/docs/self-hosting`) for DNS, deployment, key management, operations, backups, and limits. **Connect your app** (`/#/docs/connect-your-app`) explains remote integration. Both guides are available before sign-in. The VPS configuration is `compose.vps.yaml`; the default Compose file remains for local development.
+
+An app backend needs only `API_URL=https://agents.example.com` and its private `API_TOKEN`. It can run on another VPS, a serverless platform, or a laptop. No provider key or Pi installation is needed in the app. Use the [HTTP example](examples/run.mjs) with those variables; keep workspace tokens out of browser/mobile clients.
+
+`npm run test:deployment` verifies the packaged stack over HTTPS from a separate client container, without model credentials. `npm run test:deployment:live` adds real OpenRouter inference and a follow-up after restarting the services (uses your configured provider credits). Neither command deploys to a public VPS.
 
 ## Run locally
 

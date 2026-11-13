@@ -8,6 +8,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "dist",
+    "rootDir": ".",
     "sourceMap": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "harness/**/*.ts"]
