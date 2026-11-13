@@ -17,6 +17,7 @@ import {
 import { Agents, AgentEditor } from "./Agents";
 import { Sessions, SessionWorkspace } from "./Sessions";
 import { Connections, Environments } from "./Resources";
+import { Documentation } from "./Docs";
 import { api, useResource } from "./client";
 import { DocLink, ErrorBox, Loading } from "./components";
 import type { Capabilities } from "./types";
@@ -114,7 +115,7 @@ function Login({ connected }: { connected: (tenant: string) => void }) {
             Your token is exchanged for an 8-hour session. Model provider keys
             stay on the server.
           </small>
-          <DocLink path="README.md">Need help getting started?</DocLink>
+          <DocLink page="get-started">Need help getting started?</DocLink>
         </form>
       </div>
       <footer className="login-footer">
@@ -142,6 +143,8 @@ export function App() {
       window.removeEventListener("pi:unauthorized", unauthorized);
     };
   }, []);
+  if (route === "/docs" || route.startsWith("/docs/"))
+    return <Documentation route={route} />;
   if (tenant === undefined) return <Loading />;
   if (!tenant) return <Login connected={setTenant} />;
   return (
@@ -252,9 +255,7 @@ function Console({
         <div className="sidebar-bottom">
           <a
             className="help-link"
-            href="https://github.com/taherchhabra/pi-managed-agents-api/blob/main/docs/console.md"
-            target="_blank"
-            rel="noreferrer"
+            href="#/docs/get-started"
           >
             <CircleHelp size={17} />
             Documentation

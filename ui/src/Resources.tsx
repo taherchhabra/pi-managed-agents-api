@@ -356,8 +356,8 @@ export function Connections({ caps }: { caps: Capabilities }) {
             <span>PostgreSQL persistence</span>
             <span>Docker execution</span>
           </div>
-          <DocLink path="docs/architecture.md">
-            Explore the architecture
+          <DocLink page="concepts">
+            Understand agents and sessions
           </DocLink>
         </div>
       </div>
@@ -388,7 +388,7 @@ export function Connections({ caps }: { caps: Capabilities }) {
               verifies that the key and model work.
             </span>
           </div>
-          <DocLink path="README.md">Local setup guide</DocLink>
+          <DocLink page="local-setup">Local setup guide</DocLink>
         </Modal>
       )}
     </div>

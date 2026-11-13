@@ -25,7 +25,7 @@ npm run dev
 
 The service builds the console, migrates its schema, and listens on `http://127.0.0.1:8080`. Open that URL and sign in with a token from `API_KEYS` (not a model-provider key). Start with an agent preset or create your own; choose **Test agent**, select a workspace, and send a task. To compile and run JavaScript, use `npm run build` followed by `npm start`.
 
-The [console guide](docs/console.md) covers versioning, live inspection, log exports, credentials, and frontend development. For hot reloading, run `npm run dev:api` and `npm run dev:ui` in separate terminals, then visit `http://127.0.0.1:5173`.
+Select **Documentation** in the console for the built-in [getting-started guide](http://127.0.0.1:8080/#/docs/get-started), API quickstart, concepts, sandbox guide, logs, and local setup. The guides are searchable, include copyable examples, and work before sign-in. The [console guide](docs/console.md) also covers frontend development. For hot reloading, run `npm run dev:api` and `npm run dev:ui` in separate terminals, then visit `http://127.0.0.1:5173`.
 
 In another terminal, set the same bearer token and run the example:
 

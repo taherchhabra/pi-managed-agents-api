@@ -5,7 +5,7 @@ import {
   Copy,
   LoaderCircle,
   X,
-  ArrowUpRight,
+  ArrowRight,
 } from "lucide-react";
 
 export function Status({ value }: { value: string }) {
@@ -177,21 +177,19 @@ export function PageHeading({
   );
 }
 export function DocLink({
-  path,
+  page,
   children,
 }: {
-  path: string;
+  page: string;
   children: ReactNode;
 }) {
   return (
     <a
       className="text-link"
-      href={`https://github.com/taherchhabra/pi-managed-agents-api/blob/main/${path}`}
-      target="_blank"
-      rel="noreferrer"
+      href={"#/docs/" + page}
     >
       {children}
-      <ArrowUpRight size={14} />
+      <ArrowRight size={14} />
     </a>
   );
 }
