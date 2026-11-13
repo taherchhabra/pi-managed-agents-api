@@ -25,7 +25,7 @@ Open **http://127.0.0.1:5173**. Vite proxies API, authentication, and event-stre
 - **Playground:** see user prompts, completed Markdown responses, run status, timings, and reported token usage. Cancellation stops the active generation/sandbox through the worker. A waiting run can be resumed only when no tools have executed; the API enforces that recovery boundary.
 - **Inspector:** browse each run's persisted steps, expand tool arguments/results, inspect full event JSON, and search logs by event type or payload. The event stream reconnects from its last sequence, deduplicates replayed events, and displays connection state. Log export fetches the full server history, including pages not visible in the inspector.
 - **Artifacts:** preview text outputs and download immutable files from completed runs. Each successful run publishes a snapshot of `outputs/`, so an unchanged file can appear for several runs. Previews render file contents as text, including HTML and SVG.
-- **Connections:** inspect which server provider keys are configured and which models exist in the pinned catalog. Presence of a key is not proof of provider connectivity. A successful run verifies actual access. Provider secrets remain operator-managed.
+- **Connections:** inspect which server provider keys are configured and which models exist in the service catalog (Pi's pinned catalog plus service additions). Presence of a key is not proof of provider connectivity. A successful run verifies actual access. Provider secrets remain operator-managed.
 
 Archiving preserves history and published artifacts, prevents new runs, and releases the sandbox workspace. The UI explains that consequence before submitting the action. Pending runs must be cancelled or finished first.
 

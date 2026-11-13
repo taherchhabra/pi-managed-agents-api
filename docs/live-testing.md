@@ -16,7 +16,7 @@ Put `OPENROUTER_API_KEY` in the repository's ignored `.env` file, then run:
 npm run test:live
 ```
 
-`LIVE_MODEL` defaults to `openai/gpt-4.1-mini`. An override must be in Pi's pinned OpenRouter catalog and support tool calling. The key must have access to that model. OpenRouter documents [bearer authentication](https://openrouter.ai/docs/api_reference/authentication) and its [tool-calling interface](https://openrouter.ai/docs/guides/features/tool-calling).
+`LIVE_MODEL` defaults to `openai/gpt-4.1-mini`. An override must be in the service OpenRouter catalog (Pi's pinned models plus `src/models.ts`) and support tool calling. For DeepSeek V4.1 Flash 1017, run `LIVE_MODEL=deepseek/deepseek-v4.1-flash-1017 npm run test:live`. The key must have access to that model. OpenRouter documents [bearer authentication](https://openrouter.ai/docs/api_reference/authentication) and its [tool-calling interface](https://openrouter.ai/docs/guides/features/tool-calling).
 
 The harness uses `TEST_DATABASE_URL`, then `DATABASE_URL`, then the local Compose database. Its database user needs permission to create and drop schemas. `SANDBOX_IMAGE` selects the already-built local image. There is no automatic image pull, no API-key prompt, and no fixture fallback. A missing key exits unsuccessfully before provisioning or calling a model.
 
@@ -64,3 +64,7 @@ Verified **14 November 2026, Asia/Kuala_Lumpur** (2026-11-13 16:25 UTC), with Pi
 | Cancellation | Passed | 2.25 s; cancellation settled in 317 ms |
 
 The suite made **9 real model requests** and passed **6/6 checks** in approximately **19.5 seconds**, with no cleanup errors. Four completed runs reported **4,742 tokens** and an SDK cost estimate of **$0.0023828**; the cancelled run's usage is unknown and excluded. This result qualifies the selected model/path for these scenarios; it does not establish all-model compatibility or production reliability.
+
+### DeepSeek V4.1 Flash 1017
+
+Verified **14 November 2026, Asia/Kuala_Lumpur** (2026-11-13 19:11 UTC), with Pi SDK **1.5.2** and OpenRouter **deepseek/deepseek-v4.1-flash-1017**. All **6/6 checks** above passed in **16.2 seconds**, using **11 real model requests** with no cleanup errors. The run exercised `bash`, `write_file`, and `read_file`; verified generated artifacts and event replay; restored conversation and workspace state; and settled cancellation in **321 ms**. Four completed runs reported **10,357 tokens** and an SDK cost estimate of **$0.0006448492**, excluding unknown usage from the cancelled request. These results use the shared service model registration in `src/models.ts` without changing the pinned SDK.

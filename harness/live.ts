@@ -1,10 +1,10 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { getBuiltinModel } from '@earendil-works/pi-ai/providers/all';
 import pg from 'pg';
 import { buildApi } from '../src/api.js';
 import { ArtifactStore } from '../src/artifacts.js';
+import { modelCatalog } from '../src/catalog.js';
 import { SDK_VERSION } from '../src/domain.js';
 import { piRuntime } from '../src/runtime.js';
 import { docker, DockerSandboxProvider } from '../src/sandbox.js';
@@ -22,8 +22,8 @@ if (!key || /replace|your.key|example/i.test(key)) {
 
 async function runLive(key: string) {
   const model = process.env.LIVE_MODEL ?? 'openai/gpt-4.1-mini';
-  const selected = getBuiltinModel('openrouter', model as any);
-  if (!selected) throw new Error('LIVE_MODEL is not available in the pinned Pi OpenRouter catalog');
+  const selected = (await modelCatalog()).find(provider => provider.id === 'openrouter')?.models.find(entry => entry.id === model);
+  if (!selected) throw new Error('LIVE_MODEL is not available in the service OpenRouter catalog');
   const started = new Date();
   const reportDir = resolve('.data/live-tests', started.toISOString().replaceAll(':', '-') + '-' + randomBytes(3).toString('hex'));
   await mkdir(reportDir, { recursive: true, mode: 0o700 });

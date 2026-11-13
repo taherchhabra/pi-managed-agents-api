@@ -7,6 +7,7 @@ import {
   type FileEntry, type ResourceLoader, type ToolDefinition,
 } from '@earendil-works/pi-coding-agent';
 import { SDK_VERSION, type AgentConfig, type Checkpoint, type Job, type ToolName, type ToolResult } from './domain.js';
+import { registerServiceModels } from './models.js';
 
 export interface RuntimeResult { checkpoint: Checkpoint; output: string; usage: unknown }
 export interface Runtime { run(): Promise<RuntimeResult>; close(): Promise<void> }
@@ -78,6 +79,7 @@ export function piRuntime(options: PiOptions): RuntimeFactory {
     try {
       const modelRuntime = await ModelRuntime.create({ authPath: join(directory, 'auth.json'),
         modelsPath: null, modelsStorePath: join(directory, 'models-cache.json'), refreshOnCreate: false, allowModelNetwork: false });
+      registerServiceModels(modelRuntime);
       if (key) await modelRuntime.setRuntimeApiKey(job.config.provider, key);
       await options.configureModelRuntime?.(modelRuntime);
       hooks.signal.throwIfAborted();

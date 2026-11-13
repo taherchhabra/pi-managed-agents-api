@@ -34,9 +34,11 @@ export API_TOKEN='your-token-from-API_KEYS'
 npm run example
 ```
 
-[The example](examples/run.mjs) creates an agent, environment, session, and run; watches durable SSE events; then prints the result and artifact download paths. It defaults to `openai/gpt-4.1-mini`; use `MODEL_PROVIDER=anthropic MODEL=claude-sonnet-4-5 npm run example` for Anthropic. The selected model must exist in Pi's pinned catalog. These calls use your configured provider account.
+[The example](examples/run.mjs) creates an agent, environment, session, and run; watches durable SSE events; then prints the result and artifact download paths. It defaults to `openai/gpt-4.1-mini`; use `MODEL_PROVIDER=anthropic MODEL=claude-sonnet-4-5 npm run example` for Anthropic. The selected model must exist in the service catalog (Pi's pinned models plus [service additions](src/models.ts)). These calls use your configured provider account.
 
 For OpenRouter, use `MODEL_PROVIDER=openrouter MODEL=openai/gpt-4.1-mini npm run example`.
+
+[DeepSeek V4.1 Flash 1017](https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017) is available in the console under **OpenRouter**, with model ID `deepseek/deepseek-v4.1-flash-1017`. The console and worker share the same catalog additions. To run its real-model acceptance suite, use `LIVE_MODEL=deepseek/deepseek-v4.1-flash-1017 npm run test:live`.
 
 ## Test with a real model
 
