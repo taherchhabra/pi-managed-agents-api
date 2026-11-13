@@ -2,7 +2,7 @@
 
 A working MVP of a managed agents API built on the **Pi coding agent SDK**. TypeScript, Fastify, PostgreSQL, and Docker supply the service around Pi's model/tool loop.
 
-It implements immutable agent versions, tenant-scoped sessions, asynchronous runs, idempotent admission, a leased worker, persistent Pi checkpoints, Docker tools, replayable SSE events, cancellation, and downloadable artifacts. The API is native to this project; provider compatibility adapters are future work.
+It implements immutable agent versions, tenant-scoped sessions, asynchronous runs, idempotent admission, a leased worker, persistent Pi checkpoints, Docker tools, replayable SSE events, cancellation, and downloadable artifacts. A browser console lets you build agents, test real sessions, and inspect runs, tool calls, event logs, and artifacts. The API is native to this project; provider compatibility adapters are future work.
 
 This is a development MVP for a trusted operator on one Docker host. The [MVP contract](docs/mvp.md) describes recovery behavior, tested guarantees, and the remaining work before public multi-tenant hosting.
 
@@ -23,7 +23,9 @@ Edit `.env`: replace the bearer token in `API_KEYS` and set `OPENAI_API_KEY`, `A
 npm run dev
 ```
 
-The service migrates its schema on startup and listens on `http://127.0.0.1:8080`. To compile and run JavaScript, use `npm run build` followed by `npm start`.
+The service builds the console, migrates its schema, and listens on `http://127.0.0.1:8080`. Open that URL and sign in with a token from `API_KEYS` (not a model-provider key). Start with an agent preset or create your own; choose **Test agent**, select a workspace, and send a task. To compile and run JavaScript, use `npm run build` followed by `npm start`.
+
+The [console guide](docs/console.md) covers versioning, live inspection, log exports, credentials, and frontend development. For hot reloading, run `npm run dev:api` and `npm run dev:ui` in separate terminals, then visit `http://127.0.0.1:5173`.
 
 In another terminal, set the same bearer token and run the example:
 
@@ -63,16 +65,17 @@ The tests cover concurrent admission, tenant isolation, ownership fencing, recov
 
 ## API
 
-Every `/v1` request needs `Authorization: Bearer <token>`. Every `POST` also needs `Idempotency-Key`. Retrying the same key and normalized body returns the original response; changing the body returns `409`. A run's `202` response means its input was committed, and its status must be read separately.
+API clients authenticate with `Authorization: Bearer <token>`. The same-origin console exchanges that token for an opaque, HttpOnly session cookie. Every `/v1` `POST` also needs `Idempotency-Key`. Retrying the same key and normalized body returns the original response; changing the body returns `409`. A run's `202` response means its input was committed, and its status must be read separately.
 
 | Resource | Endpoints |
 | --- | --- |
 | Agents | `POST/GET /v1/agents`, `GET /v1/agents/:id`, `POST /v1/agents/:id/versions` |
 | Environments | `POST/GET /v1/environment-templates`, `GET /v1/environment-templates/:id` |
 | Sessions | `POST/GET /v1/sessions`, `GET /v1/sessions/:id`, `POST /v1/sessions/:id/archive` |
-| Runs | `POST /v1/sessions/:id/runs`, `GET /v1/sessions/:id/runs/:run`, `POST .../:run/cancel`, `POST .../:run/resume` |
+| Runs | `POST/GET /v1/sessions/:id/runs`, `GET /v1/sessions/:id/runs/:run`, `POST .../:run/cancel`, `POST .../:run/resume` |
 | Events | `GET /v1/sessions/:id/events?after=0`, add `stream=true` for SSE |
 | Artifacts | `GET /v1/sessions/:id/artifacts`, `GET /v1/sessions/:id/artifacts/:artifact/content` |
+| Capabilities | `GET /v1/capabilities` (installed model catalog and provider configuration flags) |
 
 Run admission takes `{ "input": "...", "when_busy": "queue" }` or `"reject"`. Cancellation, resume, and archive take `{}`. SSE uses session sequence strings as IDs and accepts `Last-Event-ID`. Disconnection does not cancel a run. [Complete request examples and behavior](docs/mvp.md).
 
@@ -81,7 +84,8 @@ Run admission takes `{ "input": "...", "when_busy": "queue" }` or `"reject"`. Ca
 - [Provider architecture research](docs/provider-architecture.md) compares the reference products and their operational contracts.
 - [Proposed Pi architecture](docs/architecture.md) describes the runtime boundary, resources, persistence, recovery, and implementation stages.
 - [MVP contract](docs/mvp.md) distinguishes implemented behavior from that proposal.
+- [Console guide](docs/console.md) documents the browser workflows and verification.
 
-`src/api.ts` owns admission and reads, `src/store.ts` owns transactional state, `src/worker.ts` coordinates execution, `src/runtime.ts` embeds Pi, and `src/sandbox.ts` supplies the Docker executor. `src/artifacts.ts` stores immutable output bytes outside the workspace.
+`src/api.ts` owns admission and reads, `src/store.ts` owns transactional state, `src/worker.ts` coordinates execution, `src/runtime.ts` embeds Pi, and `src/sandbox.ts` supplies the Docker executor. `src/artifacts.ts` stores immutable output bytes outside the workspace. `src/console.ts` supplies console authentication and static hosting; `ui/` contains the React/Vite application.
 
 The SDK is pinned to `@earendil-works/pi-coding-agent@1.5.2`. Persistence, recovery, and managed execution belong to this service; no durable-harness dependency is used.

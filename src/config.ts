@@ -10,6 +10,7 @@ export interface Config {
   artifactDir: string;
   sandboxImage: string;
   providerKeys: Partial<Record<AgentConfig['provider'], string>>;
+  consoleOrigin?: string;
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -24,8 +25,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!['api', 'worker', 'all'].includes(role)) throw new Error('ROLE must be api, worker, or all');
   const port = Number(env.PORT ?? 8080);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be 1–65535');
+  const consoleOrigin = env.CONSOLE_ORIGIN;
+  if (consoleOrigin) {
+    try {
+      const url = new URL(consoleOrigin);
+      if (!['http:', 'https:'].includes(url.protocol) || url.origin !== consoleOrigin) throw new Error();
+    } catch { throw new Error('CONSOLE_ORIGIN must be an http(s) origin without a path or trailing slash'); }
+  }
   return { databaseUrl: env.DATABASE_URL, apiKeys, host: env.HOST ?? '127.0.0.1', port,
     role: role as Config['role'], artifactDir: resolve(env.ARTIFACT_DIR ?? '.data/artifacts'),
-    sandboxImage: env.SANDBOX_IMAGE ?? 'pi-managed-sandbox:dev',
+    sandboxImage: env.SANDBOX_IMAGE ?? 'pi-managed-sandbox:dev', consoleOrigin,
     providerKeys: { openai: env.OPENAI_API_KEY, anthropic: env.ANTHROPIC_API_KEY, openrouter: env.OPENROUTER_API_KEY } };
 }

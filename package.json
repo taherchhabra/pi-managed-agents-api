@@ -7,12 +7,15 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env --import tsx src/main.ts",
-    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build:ui && node --env-file-if-exists=.env --import tsx src/main.ts",
+    "dev:ui": "vite --config ui/vite.config.ts",
+    "dev:api": "node --env-file-if-exists=.env --import tsx src/main.ts",
+    "build": "tsc -p tsconfig.json && npm run build:ui",
+    "build:ui": "vite build --config ui/vite.config.ts",
     "start": "node --env-file-if-exists=.env dist/src/main.js",
     "migrate": "node --env-file-if-exists=.env --import tsx src/migrate.ts",
     "example": "node --env-file-if-exists=.env examples/run.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p ui/tsconfig.json --noEmit",
     "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
     "test:live": "node --env-file-if-exists=.env --import tsx harness/live.ts",
     "check": "npm run typecheck && npm test"
@@ -20,14 +23,24 @@
   "dependencies": {
     "@earendil-works/pi-ai": "1.5.2",
     "@earendil-works/pi-coding-agent": "1.5.2",
+    "@fastify/cookie": "11.1.5",
+    "@fastify/static": "10.1.11",
     "fastify": "5.12.8",
+    "lucide-react": "1.72.0",
     "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-markdown": "10.1.0",
     "typebox": "1.3.27"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pg": "^8.0.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vite": "8.3.8"
   }
 }

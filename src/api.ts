@@ -1,4 +1,3 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import Fastify, { LogController, type FastifyRequest } from 'fastify';
@@ -7,6 +6,8 @@ import { ArtifactStore } from './artifacts.js';
 import type { Config } from './config.js';
 import { ApiError, type AgentConfig } from './domain.js';
 import { Store } from './store.js';
+import { installConsole } from './console.js';
+import { modelCatalog } from './catalog.js';
 
 declare module 'fastify' { interface FastifyRequest { tenant: string } }
 const object = (properties: Record<string, any>) => Type.Object(properties, { additionalProperties: false });
@@ -18,26 +19,15 @@ const config = object({ provider: Type.Union([Type.Literal('openai'), Type.Liter
 const sessionParams = object({ session: id });
 const runParams = object({ session: id, run: id });
 const cursor = Type.String({ pattern: '^(0|[1-9][0-9]{0,18})$', maxLength: 19 });
-const hashToken = (token: string) => createHash('sha256').update(token).digest();
 const params = (request: FastifyRequest) => request.params as Record<string, string>;
 
-export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<Config, 'apiKeys' | 'sandboxImage'>, logger = false) {
-  const app = Fastify({ logger: logger ? { level: 'info', redact: ['req.headers.authorization'] } : false,
+export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<Config, 'apiKeys' | 'sandboxImage'> & Partial<Pick<Config, 'providerKeys' | 'consoleOrigin'>>, logger = false) {
+  const app = Fastify({ logger: logger ? { level: 'info', redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers.set-cookie'] } : false,
     logController: new LogController({ disableRequestLogging: true }), bodyLimit: 256 * 1024,
     ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
-  const keys = Object.entries(options.apiKeys).map(([key, tenant]) => ({ hash: hashToken(key), tenant }));
   const streams = new Set<AbortController>();
   app.decorateRequest('tenant', '');
-  app.addHook('onRequest', async request => {
-    if (request.routeOptions.url === '/healthz') return;
-    const auth = request.headers.authorization;
-    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : '';
-    const digest = hashToken(token);
-    let tenant: string | undefined;
-    for (const key of keys) if (timingSafeEqual(key.hash, digest)) tenant = key.tenant;
-    if (!tenant) throw new ApiError(401, 'unauthorized', 'A valid bearer token is required');
-    request.tenant = tenant;
-  });
+  installConsole(app, options.apiKeys, options.consoleOrigin);
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ApiError) return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } });
     const typed = error as { validation?: unknown; statusCode?: number; code?: string };
@@ -50,6 +40,12 @@ export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<C
   });
   app.addHook('preClose', async () => { for (const controller of streams) controller.abort(); });
   app.get('/healthz', async () => { await store.pool.query('SELECT 1'); return { status: 'ok' }; });
+  let catalog: ReturnType<typeof modelCatalog> | undefined;
+  app.get('/v1/capabilities', async () => {
+    catalog ??= modelCatalog().catch(error => { catalog = undefined; throw error; });
+    return { providers: (await catalog).map(provider => ({ ...provider, configured: !!options.providerKeys?.[provider.id] })),
+      sandbox_image: options.sandboxImage, runtime: 'Pi coding agent SDK', sdk_version: '1.5.2' };
+  });
 
   const mutation = async (request: FastifyRequest, fn: Parameters<Store['mutate']>[4]) => {
     const key = request.headers['idempotency-key'];
@@ -83,6 +79,10 @@ export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<C
     return reply.code(result.status).send(result.body);
   });
   app.get('/v1/sessions/:session', { schema: { params: sessionParams } }, request => store.getSession(request.tenant, params(request).session!));
+  app.get('/v1/sessions/:session/runs', { schema: { params: sessionParams, querystring: object({ after: Type.Optional(id) }) } }, async request => {
+    const data = await store.runs(request.tenant, params(request).session!, (request.query as { after?: string }).after);
+    return { data, next_cursor: data.length === 100 ? data.at(-1)!.id : null };
+  });
   app.post('/v1/sessions/:session/runs', { schema: { params: sessionParams,
     body: object({ input: Type.String({ minLength: 1, maxLength: 65_536 }), when_busy: Type.Union([Type.Literal('queue'), Type.Literal('reject')]) }) } }, async (request, reply) => {
     const body = request.body as { input: string; when_busy: string };
@@ -127,6 +127,7 @@ export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<C
       await write(': connected\n\n');
       let lastHeartbeat = Date.now();
       while (!controller.signal.aborted) {
+        if (request.consoleAuthorized && !request.consoleAuthorized()) break;
         const events = await store.events(request.tenant, session, after);
         for (const event of events) {
           await write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);

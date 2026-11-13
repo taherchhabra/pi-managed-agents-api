@@ -127,9 +127,14 @@ export class Store {
   async getSession(tenant: string, id: string) {
     // A single SQL snapshot pairs activity with its replay cursor.
     return requireRow((await this.pool.query(`SELECT s.id,s.status,s.agent_version_id,s.environment_template_id,s.event_seq,s.created_at,
+      a.id AS agent_id,a.name AS agent_name,v.version AS agent_version,v.config,
+      e.name AS environment_name,e.type AS environment_type,
       (SELECT row_to_json(active) FROM (SELECT ${runFields} FROM runs r WHERE r.session_id=s.id
         AND r.status IN ('running','waiting','cancelling') LIMIT 1) active) AS active_run
-      FROM sessions s WHERE s.id=$1 AND s.tenant_id=$2`, [id, tenant])).rows[0]);
+      FROM sessions s JOIN agent_versions v ON v.id=s.agent_version_id AND v.tenant_id=s.tenant_id
+      JOIN agents a ON a.id=v.agent_id AND a.tenant_id=s.tenant_id
+      JOIN environment_templates e ON e.id=s.environment_template_id AND e.tenant_id=s.tenant_id
+      WHERE s.id=$1 AND s.tenant_id=$2`, [id, tenant])).rows[0]);
   }
   async getAgent(tenant: string, id: string) {
     return requireRow((await this.pool.query(`SELECT a.id,a.name,a.created_at,
@@ -144,8 +149,29 @@ export class Store {
     return requireRow((await this.pool.query('SELECT ' + runFields + ' FROM runs WHERE tenant_id=$1 AND session_id=$2 AND id=$3', [tenant, session, run])).rows[0]);
   }
   async list(tenant: string, resource: 'agents' | 'environment_templates' | 'sessions') {
+    if (resource === 'agents') return (await this.pool.query(`SELECT a.id,a.name,a.created_at,
+      (SELECT row_to_json(v) FROM (SELECT id,version,config,created_at FROM agent_versions WHERE agent_id=a.id AND tenant_id=a.tenant_id ORDER BY version DESC LIMIT 1) v) AS latest_version,
+      (SELECT count(*)::integer FROM sessions s JOIN agent_versions v ON v.id=s.agent_version_id WHERE v.agent_id=a.id AND s.tenant_id=a.tenant_id) AS session_count
+      FROM agents a WHERE a.tenant_id=$1 ORDER BY a.created_at DESC,a.id DESC LIMIT 100`, [tenant])).rows;
+    if (resource === 'sessions') return (await this.pool.query(`SELECT s.id,s.status,s.agent_version_id,s.environment_template_id,s.created_at,
+      a.id AS agent_id,a.name AS agent_name,v.version AS agent_version,v.config->>'model' AS model,
+      e.name AS environment_name,e.type AS environment_type,
+      (SELECT row_to_json(r) FROM (SELECT id,status,left(input,200) AS input,created_at FROM runs WHERE session_id=s.id AND tenant_id=s.tenant_id ORDER BY created_at DESC,id DESC LIMIT 1) r) AS latest_run,
+      (SELECT count(*)::integer FROM runs WHERE session_id=s.id AND tenant_id=s.tenant_id) AS run_count,
+      (SELECT count(*)::integer FROM runs WHERE session_id=s.id AND tenant_id=s.tenant_id AND status IN ('queued','running','waiting','cancelling')) AS pending_runs
+      FROM sessions s JOIN agent_versions v ON v.id=s.agent_version_id AND v.tenant_id=s.tenant_id
+      JOIN agents a ON a.id=v.agent_id AND a.tenant_id=s.tenant_id
+      JOIN environment_templates e ON e.id=s.environment_template_id AND e.tenant_id=s.tenant_id
+      WHERE s.tenant_id=$1 ORDER BY s.created_at DESC,s.id DESC LIMIT 100`, [tenant])).rows;
     const fields = { agents: 'id,name,created_at', environment_templates: 'id,name,type,image,created_at', sessions: 'id,status,agent_version_id,environment_template_id,created_at' }[resource];
     return (await this.pool.query('SELECT ' + fields + ' FROM ' + resource + ' WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100', [tenant])).rows;
+  }
+  async runs(tenant: string, session: string, after?: string) {
+    requireRow((await this.pool.query('SELECT id FROM sessions WHERE id=$1 AND tenant_id=$2', [session, tenant])).rows[0]);
+    if (after) await this.getRun(tenant, session, after);
+    return (await this.pool.query('SELECT ' + runFields + ` FROM runs WHERE tenant_id=$1 AND session_id=$2
+      ${after ? 'AND (created_at,id)>(SELECT created_at,id FROM runs WHERE id=$3 AND tenant_id=$1 AND session_id=$2)' : ''}
+      ORDER BY created_at,id LIMIT 100`, after ? [tenant, session, after] : [tenant, session])).rows;
   }
   async events(tenant: string, session: string, after: string, limit = 100) {
     requireRow((await this.pool.query('SELECT id FROM sessions WHERE id=$1 AND tenant_id=$2', [session, tenant])).rows[0]);
