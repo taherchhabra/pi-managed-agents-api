@@ -6,13 +6,18 @@ export const docPages: DocPage[] = [
     "id": "get-started",
     "title": "Get started",
     "group": "Start building",
-    "description": "Create your first agent, run a task, and see exactly what happened.",
-    "minutes": "5 min",
+    "description": "Create an agent, send a task, inspect its tools and files, then continue the same session.",
+    "minutes": "7 min",
     "sections": [
       {
         "id": "before-you-start",
         "title": "Before you start",
-        "body": "You need a running Pi Agents workspace, its **workspace API token**, and a model provider configured on the server. If you are already signed in, you can start below.\n\nOpen [Connections](#/connections) and look for a **configured** provider. This means a key is present; your first successful run confirms model access. Need to start the server or add a key? Follow [Local setup](#/docs/local-setup) for development or [Self-host on a VPS](#/docs/self-hosting) for a remote deployment."
+        "body": "You need three things for your first run:\n\n- **A running workspace.** Use your own [local installation](#/docs/local-setup), [host it on a VPS](#/docs/self-hosting), or open the address your operator gave you.\n- **A workspace token.** This signs you in and identifies your workspace. [Find your token below](#/docs/get-started?section=workspace-token).\n- **A model provider.** In [Connections](#/connections), check that at least one provider is **Configured**. This confirms a key is present; your first successful run confirms model access.\n\nAlready signed in with a configured provider? Jump to [Create an agent](#/docs/get-started?section=create-an-agent)."
+      },
+      {
+        "id": "workspace-token",
+        "title": "Find your workspace token",
+        "body": "Your **workspace token** is issued by the operator of this Pi Agents server. It is separate from an OpenRouter, OpenAI, or Anthropic API key.\n\n- **VPS installation:** the setup helper generates a token and saves it under `API_KEYS` in `.env.vps`.\n- **Existing local installation:** find `API_KEYS` in the server's `.env` file.\n- **Someone else hosts the workspace:** ask that operator for your token.\n\nThe configuration looks like this:\n\n```dotenv\nAPI_KEYS='{\"PASTE_YOUR_GENERATED_TOKEN_HERE\":\"demo\"}'\n```\n\nThe text **before the colon** is the token; `demo` is the workspace name. Open [the console](#/agents), paste **only the token** into **API token**, and select **Connect to workspace**. Do not paste the whole JSON object or a model provider key.\n\nFor a new local installation, [generate a token and configure the server](#/docs/local-setup?section=credentials). On a VPS, you can also [issue a token for another workspace](#/docs/self-hosting?section=keys). A workspace token grants access to that workspace's agents, sessions, logs, and files.\n\nThe console exchanges your token for an 8-hour browser session. Sign in again when it expires or the API restarts. These documentation pages remain available before sign-in."
       },
       {
         "id": "create-an-agent",
@@ -27,17 +32,17 @@ export const docPages: DocPage[] = [
       {
         "id": "send-a-task",
         "title": "3. Give it a task",
-        "body": "Paste this into the session composer and send it. The agent will write code, run it in the sandbox, and save a file you can inspect.\n\n```text\nWrite a Python program that generates the first ten Fibonacci numbers. Run it and save the program as outputs/fibonacci.py and the numbers as outputs/fibonacci.txt. Briefly explain the result.\n```\n\nThe run moves from **queued** to **running**, then **completed**. Keep the session open to follow its progress. Sending a task uses your configured model provider account."
+        "body": "Paste this into **Message the agent** in the Playground. Press **Enter** or select the send arrow; use **Shift + Enter** for a new line.\n\n```text\nWrite a Python program that generates the first ten Fibonacci numbers. Run it and save the program as outputs/fibonacci.py and the numbers as outputs/fibonacci.txt. Briefly explain the result.\n```\n\nSending a task creates a run and uses your configured model provider account. Its status moves from **Queued** to **Running**, then **Completed**. The inspector updates as work is recorded; the assistant response appears when complete. You can close the page and reopen the session while the worker continues."
       },
       {
         "id": "inspect-the-result",
         "title": "4. Inspect the result",
-        "body": "Use the session inspector beside the conversation:\n\n- **Runs** shows each attempt, its status, and the tool calls. Expand a call to see its arguments and result.\n- **Event log** shows the saved event log. Search or inspect an event's JSON to understand what happened.\n- **Artifacts** contains files published from `outputs/` after a successful run. Preview or download `fibonacci.txt`.\n\nSelect **Export logs** to download the session history. Events update as work is recorded; assistant text appears when a response is complete."
+        "body": "The **Inspector** sits beside the conversation on desktop and below it on a narrow screen. Use its three tabs:\n\n- **Runs:** expand the run, then a tool call, to see its arguments, result, and duration. The **tool calls** button below an assistant name takes you to that run.\n- **Event log:** choose a run, search event names or payloads, and select **Tools** or **Errors** to narrow the list. Select an event to inspect or copy its JSON.\n- **Artifacts:** preview or download `fibonacci.py` and `fibonacci.txt`. These are saved snapshots published from `outputs/` after a successful run.\n\nSelect **Export logs** at the top of the session to download its saved history. If the run fails or needs attention, use [Runs & logs](#/docs/runs-and-logs?section=troubleshoot) to find the next step."
       },
       {
         "id": "keep-building",
         "title": "5. Continue the conversation",
-        "body": "Send a follow-up in the same session:\n\n```text\nRead outputs/fibonacci.txt and tell me the sum of those numbers.\n```\n\nThe agent uses the existing workspace and conversation. Start a new session when you want a fresh task context.\n\nYou are ready to [build with the API](#/docs/api-quickstart), learn how [agents and sessions fit together](#/docs/concepts), or explore [runs and logs](#/docs/runs-and-logs)."
+        "body": "Send a follow-up in the **same session**:\n\n```text\nRead outputs/fibonacci.txt and tell me the sum of those numbers.\n```\n\nFor the sequence `0, 1, 1, 2, 3, 5, 8, 13, 21, 34`, the expected sum is **88**. This second run should use the file and conversation from the first run.\n\nReturn through [Sessions](#/sessions) to continue later. Start a new session for a fresh conversation and separate files. If you edit the agent and save a new version, start a new session to test that version; existing sessions keep their original configuration.\n\nReady to connect your application? The [API quickstart](#/docs/api-quickstart) performs this complete lifecycle from Node.js, including the follow-up and artifact downloads. [Connect your app](#/docs/connect-your-app) explains how to use a workspace hosted on another server."
       }
     ]
   },
@@ -51,7 +56,7 @@ export const docPages: DocPage[] = [
       {
         "id": "authenticate",
         "title": "1. Connect to your workspace",
-        "body": "Use **Node.js 22.19+** and a running server with OpenRouter configured. Set the same workspace token you use to sign in to the console. It is a token from the server's `API_KEYS` configuration; provider keys stay on the server.\n\n```sh\nexport API_URL='http://127.0.0.1:8080'\nexport API_TOKEN='your-workspace-token'\nexport MODEL_PROVIDER='openrouter'\nexport MODEL='deepseek/deepseek-v4.1-flash-1017'\n```\n\nAPI clients send `Authorization: Bearer <token>`. Every new `POST /v1/...` operation also needs an `Idempotency-Key`. Reuse the same key and body if you retry that operation after an uncertain response.\n\nFor a self-hosted server, set `API_URL=https://agents.example.com` instead. [Connect your app](#/docs/connect-your-app) explains remote app credentials, session ownership, and retries."
+        "body": "Use **Node.js 22.19+** and a running server with OpenRouter configured. Set the same workspace token you use to sign in to the console. Use [Find your workspace token](#/docs/get-started?section=workspace-token) if you do not have it yet. The token comes from the server's `API_KEYS` configuration; provider keys stay on the server.\n\n```sh\nexport API_URL='http://127.0.0.1:8080'\nexport API_TOKEN='your-workspace-token'\nexport MODEL_PROVIDER='openrouter'\nexport MODEL='deepseek/deepseek-v4.1-flash-1017'\n```\n\nAPI clients send `Authorization: Bearer <token>`. Every new `POST /v1/...` operation also needs an `Idempotency-Key`. Reuse the same key and body if you retry that operation after an uncertain response.\n\nFor a self-hosted server, set `API_URL=https://agents.example.com` instead. [Connect your app](#/docs/connect-your-app) explains remote app credentials, session ownership, and retries."
       },
       {
         "id": "check-connection",
@@ -187,7 +192,7 @@ export const docPages: DocPage[] = [
       {
         "id": "inspect",
         "title": "Read the session inspector",
-        "body": "Open a session from [Sessions](#/sessions). The conversation shows prompts and completed assistant responses. In the inspector:\n\n- **Runs** groups the steps for each task. Expand tool calls to inspect inputs and results.\n- **Event log** shows the saved event log, with search, filters, and raw JSON details.\n- **Artifacts** lets you preview or download published files.\n\nUse **Export logs** to save the session history, including runs and events beyond the currently visible list."
+        "body": "Open a session from [Sessions](#/sessions). **Playground** shows your messages and completed assistant responses. **Inspector** appears beside it on desktop and below it on a narrow screen.\n\n- **Runs** groups the steps for each task. Expand a run to see its attempt, duration, reported cost, and saved steps. Expand a tool call for its arguments and result. The **tool calls** button in the conversation opens the matching run.\n- **Event log** lists sequence numbers, event names, and timestamps. Use **Filter inspector by run**, **Search events**, and the **All events / Tools / Errors** selector to focus on the work you need. Select a row to inspect the payload, copy it, or expand **Full event JSON**.\n- **Artifacts** lists files published from successful runs. **Preview** is available for supported text files up to 256 KiB; **Download** saves any published file. Later changes to workspace files do not alter an existing artifact.\n\nThe summary above the Playground shows the pinned model, environment, run count, tool calls, and reported tokens. Usage comes from Pi; interrupted attempts may have incomplete usage.\n\nUse **Export logs** to download the session history, including runs and events beyond the currently visible list."
       },
       {
         "id": "statuses",
@@ -231,7 +236,7 @@ export const docPages: DocPage[] = [
       {
         "id": "credentials",
         "title": "2. Configure credentials",
-        "body": "Edit the local `.env` file. Set `API_KEYS` to a JSON object mapping a long, random workspace token to a workspace name. Tokens must be at least 24 characters. Set at least one model provider key.\n\n```dotenv\nAPI_KEYS={\"replace-with-a-long-random-workspace-token\":\"demo\"}\nOPENROUTER_API_KEY=your-openrouter-key\n```\n\nUse the token on the left side of `API_KEYS` to sign in to the console or authenticate API clients. Keep provider keys on the server. OpenAI and Anthropic use `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` respectively.\n\nThe `.env` file is ignored by Git. After changing credentials on a running instance, restart the API and worker. Existing console sessions need to sign in again after an API restart."
+        "body": "Edit the server's local `.env` file. For a **new installation**, generate a random workspace token:\n\n```sh\nnode -e \"console.log('pi_' + require('node:crypto').randomBytes(32).toString('base64url'))\"\n```\n\nCopy the output into `API_KEYS` as the JSON key before the colon. The value, `demo`, names the workspace. Reuse your existing token if this installation already has one. Tokens must contain at least 24 characters.\n\n```dotenv\nAPI_KEYS='{\"PASTE_YOUR_GENERATED_TOKEN_HERE\":\"demo\"}'\nOPENROUTER_API_KEY=your-openrouter-key\n```\n\nReplace both placeholders with your own values. Use **only the generated workspace token** in the console's **API token** field or your app backend's `API_TOKEN`. Keep the model provider key on the agents server; it does not sign you into the console. OpenAI and Anthropic use `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` respectively.\n\nThe `.env` file is ignored by Git. After changing credentials on a running instance, restart the API and worker. Existing console sessions need to sign in again after an API restart."
       },
       {
         "id": "start-console",

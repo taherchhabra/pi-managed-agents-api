@@ -290,9 +290,9 @@ If the server is already running, restart `npm run dev` after changing `.env`; f
 
 ## Documentation in your workspace
 
-Getting started, API integration, sessions, tools, logs, and VPS operations are documented **inside the UI**, alongside the agents you are building. Search the guides, copy runnable examples, and follow links straight into the console.
+Getting started, API integration, sessions, tools, logs, and VPS operations are documented **inside the UI**, alongside the agents you are building. Find your workspace token, follow the complete agent-to-session walkthrough, and learn how to inspect tool calls, events, and files. Search the guides, copy runnable examples, and follow links straight into the console.
 
-![The built-in getting-started documentation with agent, session, run, and result guidance](docs/images/documentation.jpg)
+![The built-in getting-started guide with larger text, dark navigation, and workspace setup instructions](docs/images/documentation.jpg)
 
 On a local install, [open Documentation](http://127.0.0.1:8080/#/docs/get-started). Every hosted instance serves the same guides at `/#/docs/get-started`, including before sign-in.
 
