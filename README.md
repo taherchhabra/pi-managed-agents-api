@@ -50,7 +50,7 @@ The API exposes that same history through a resumable **server-sent event stream
 
 ## Connect your app
 
-Host Pi Agents on a VPS and call it from your application backend, wherever that backend runs. Your app needs an **API URL** and a **workspace token**. Model provider credentials stay on the agents server.
+Host Pi Agents on a VPS and call it from your application backend, wherever that backend runs. Your app needs an **API URL** and a [**workspace token**](#get-your-workspace-token). Model provider credentials stay on the agents server.
 
 This complete Node.js example creates everything through the API: **agent → environment → session → user message → result → user reply → next result → files**. No console setup or existing session ID is required.
 
@@ -222,7 +222,7 @@ node scripts/vps.mjs init agents.example.com you@example.com
 node scripts/vps.mjs up
 ```
 
-The helper generates private credentials and starts Caddy HTTPS, PostgreSQL, the API/console, and the Pi worker. Open your domain and sign in with the workspace token in `.env.vps` → `API_KEYS`.
+The helper generates private credentials and starts Caddy HTTPS, PostgreSQL, the API/console, and the Pi worker. Open `.env.vps` on the server and find `API_KEYS`: the JSON object's **key** is your automatically generated workspace token; its value, `demo`, is the workspace name. Copy just the token and use it to sign in at your domain. See [Get your workspace token](#get-your-workspace-token) for an example.
 
 From there, follow **Documentation → Self-host on a VPS** for deployment checks, application tokens, updates, backups, and recovery. **Connect your app** explains how to use the hosted API from another server.
 
@@ -237,9 +237,29 @@ docker build -f Dockerfile.sandbox -t pi-managed-sandbox:dev .
 [ -f .env ] || cp .env.example .env
 ```
 
-Edit `.env`: replace the token in `API_KEYS` and set `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`. Then run `npm run dev` and open **http://127.0.0.1:8080**.
+Edit `.env`: [generate and configure a workspace token](#get-your-workspace-token) in `API_KEYS`, and set `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`. Then run `npm run dev` and open **http://127.0.0.1:8080**.
 
 Sign in with the workspace token, create an agent, and choose **Test agent**. For a first task, ask it to write and run a Python program and save the results under `outputs/`.
+
+### Get your workspace token
+
+The workspace token is a secret issued by the person running your Pi Agents server. It authenticates both console sign-in and API requests. OpenRouter, OpenAI, and Anthropic keys are separate credentials used by the server to call models.
+
+- **VPS installation:** `node scripts/vps.mjs init ...` generates a token automatically and saves it in `.env.vps` under `API_KEYS`.
+- **Existing local installation:** open `.env` and find the token already configured in `API_KEYS`.
+- **New local installation:** generate a token with this command, then copy its output into `.env` as shown below:
+
+```sh
+node -e "console.log('pi_' + require('node:crypto').randomBytes(32).toString('base64url'))"
+```
+
+```dotenv
+API_KEYS='{"PASTE_YOUR_GENERATED_TOKEN_HERE":"demo"}'
+```
+
+Replace `PASTE_YOUR_GENERATED_TOKEN_HERE` with your generated token. The text **before the colon** is the token; `demo` is the workspace name. Paste only the token into the console's sign-in field, and use that same value as `API_TOKEN` in your application's backend. Do not paste the whole JSON object or the workspace name.
+
+If the server is already running, restart `npm run dev` after changing `.env`; for `.env.vps` changes, run `node scripts/vps.mjs up`. If someone else hosts the server, ask that operator for a token. Keep the token private; do not commit it to Git.
 
 ## Documentation in your workspace
 
