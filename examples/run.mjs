@@ -1,58 +1,97 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 
-const base = process.env.API_URL ?? 'http://127.0.0.1:8080';
+const base = (process.env.API_URL ?? 'http://127.0.0.1:8080').replace(/\/$/, '');
 const token = process.env.API_TOKEN;
-if (!token) throw new Error('Set API_TOKEN to a bearer token from the server API_KEYS configuration');
-const headers = { authorization: 'Bearer ' + token };
-async function request(path, body) {
-  const response = await fetch(base + path, body === undefined ? { headers } : {
-    method: 'POST', headers: { ...headers, 'content-type': 'application/json', 'idempotency-key': randomUUID() }, body: JSON.stringify(body),
+if (!token) throw new Error('Set API_TOKEN to a workspace token from the server');
+const headers = { Authorization: `Bearer ${token}` };
+
+// For a retry, pass the original requestId and the unchanged body.
+async function request(path, body, requestId = randomUUID()) {
+  const response = await fetch(base + path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? headers : {
+      ...headers, 'Content-Type': 'application/json', 'Idempotency-Key': requestId,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
   });
-  const json = await response.json();
-  if (!response.ok) throw new Error(JSON.stringify(json));
-  return json;
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+  return response.json();
 }
 
-const agent = await request('/v1/agents', { name: 'Artifact assistant', config: {
-  provider: process.env.MODEL_PROVIDER ?? 'openai', model: process.env.MODEL ?? 'gpt-4.1-mini',
-  instructions: 'Complete the task using the sandbox. Save all deliverables under /workspace/outputs.',
-  tools: ['bash', 'read_file', 'write_file'],
-} });
-const environment = await request('/v1/environment-templates', { name: 'Python sandbox', type: 'managed' });
-const session = await request('/v1/sessions', { agent_version_id: agent.latest_version.id, environment_template_id: environment.id });
-const sessionPath = `/v1/sessions/${session.id}`;
-const run = await request(sessionPath + '/runs', {
-  input: process.env.PROMPT ?? 'Write a Python program that generates the first ten Fibonacci numbers. Run it and save the program and its output in outputs/.',
-  when_busy: 'queue',
-});
-console.log({ session: session.id, run: run.id });
-
-const controller = new AbortController();
-const timeout = setTimeout(() => controller.abort(new Error('Example timed out; inspect the run status through the API')), 360_000);
-try {
-  const response = await fetch(base + sessionPath + '/events?stream=true', { headers, signal: controller.signal });
-  if (!response.ok) throw new Error(await response.text());
-  const decoder = new TextDecoder();
-  let buffer = '';
-  events: for await (const chunk of response.body) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let boundary;
-    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-      const frame = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      const data = frame.split('\n').find(line => line.startsWith('data: '));
-      if (!data) continue;
-      const event = JSON.parse(data.slice(6));
-      console.log(event.seq, event.type);
-      if (event.run_id === run.id && ['run.completed', 'run.failed', 'run.cancelled', 'run.waiting'].includes(event.type)) break events;
+async function waitForRun(sessionPath, runId) {
+  const runPath = `${sessionPath}/runs/${runId}`;
+  const deadline = Date.now() + 360_000;
+  while (Date.now() < deadline) {
+    const run = await request(runPath);
+    if (run.status === 'completed') return run;
+    if (['failed', 'cancelled', 'waiting'].includes(run.status)) {
+      throw new Error(`${runPath}: ${run.status}; ${run.error?.message ?? 'inspect the run in the console'}`);
     }
+    await delay(1_000);
   }
-  const result = await request(sessionPath + '/runs/' + run.id);
-  console.log(JSON.stringify(result, null, 2));
-  const artifacts = await request(sessionPath + '/artifacts');
-  console.log(JSON.stringify(artifacts, null, 2));
-  if (result.status !== 'completed') process.exitCode = 1;
-} finally {
-  clearTimeout(timeout);
-  controller.abort();
+  throw new Error(`Timed out waiting for ${runPath}; the server may still be working`);
+}
+
+// 1. Create an agent and its first immutable version.
+const agent = await request('/v1/agents', {
+  name: 'Python assistant',
+  config: {
+    provider: process.env.MODEL_PROVIDER ?? 'openrouter',
+    model: process.env.MODEL ?? 'deepseek/deepseek-v4.1-flash-1017',
+    instructions: 'Use Python to verify calculations. Save deliverables under outputs/. Keep replies concise.',
+    tools: ['bash', 'read_file', 'write_file'],
+  },
+});
+
+// 2. Give sessions a managed Docker workspace.
+const environment = await request('/v1/environment-templates', {
+  name: 'Python workspace', type: 'managed',
+});
+
+// 3. Start a conversation pinned to this agent version.
+const session = await request('/v1/sessions', {
+  agent_version_id: agent.latest_version.id,
+  environment_template_id: environment.id,
+});
+const sessionPath = `/v1/sessions/${session.id}`;
+console.log('Session:', session.id); // Store this ID with the conversation in your app.
+
+// 4. Send the user's first message. Persist this key/body to retry safely.
+const firstRequestId = randomUUID();
+const firstMessage = {
+  input: process.env.PROMPT ?? 'Use Python to calculate the first ten Fibonacci numbers starting with 0, 1. Save the code to outputs/fibonacci.py and the numbers to outputs/fibonacci.txt.',
+  when_busy: 'queue',
+};
+console.log('User:', firstMessage.input);
+const firstRun = await request(`${sessionPath}/runs`, firstMessage, firstRequestId);
+console.log('Run:', firstRun.id); // HTTP 202 means accepted; model work is asynchronous.
+
+// 5. Wait for completion and return the assistant's response to your user.
+const firstResult = await waitForRun(sessionPath, firstRun.id);
+console.log('Assistant:', firstResult.output_text);
+
+// 6. The user replies. Reuse the session to keep its conversation and files.
+const replyRequestId = randomUUID();
+const replyMessage = {
+  input: process.env.FOLLOWUP_PROMPT ?? 'Read outputs/fibonacci.txt and tell me the sum of those numbers.',
+  when_busy: 'queue',
+};
+console.log('User:', replyMessage.input);
+const nextRun = await request(`${sessionPath}/runs`, replyMessage, replyRequestId);
+console.log('Run:', nextRun.id);
+const nextResult = await waitForRun(sessionPath, nextRun.id);
+console.log('Assistant:', nextResult.output_text);
+
+// 7. Retrieve the latest run's output snapshots using the same authentication.
+const { data: files } = await request(`${sessionPath}/artifacts`);
+for (const file of files.filter(file => file.run_id === nextRun.id)) {
+  const response = await fetch(base + file.download_url, {
+    headers, signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`Artifact download failed: HTTP ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  console.log(`Downloaded ${file.path} (${bytes.length} bytes)`);
+  // Store these bytes, or return them to the authorized user from your backend.
 }

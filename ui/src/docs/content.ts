@@ -61,12 +61,12 @@ export const docPages: DocPage[] = [
       {
         "id": "client",
         "title": "3. Run the complete example",
-        "body": "Save the following as **quickstart.mjs**, then run `node quickstart.mjs` in the terminal where you set the variables above. No client package is required.\n\nThe example creates an agent, a managed environment, and a session; submits a task; follows its event stream; and prints the final response and artifact download paths. Each execution creates a new session and makes real model calls."
+        "body": "Save the following as **quickstart.mjs**, then run `node quickstart.mjs` in the terminal where you set the variables above. No client package is required.\n\nThe example creates an agent, a managed environment, and a session; sends a user message; waits for the response; sends a follow-up in the same session; and downloads the latest output files into memory. It prints both assistant responses and the downloaded file sizes. Each execution creates a new agent and session and makes two real agent runs."
       },
       {
         "id": "inspect-api-result",
         "title": "4. Inspect and continue",
-        "body": "The script prints the session and run IDs. Open [Sessions](#/sessions) in the console, using a token for the same workspace, to inspect the conversation, tool calls, logs, and files.\n\nTo continue a session, submit another `POST /v1/sessions/:session/runs` with:\n\n```json\n{\n  \"input\": \"Read outputs/ and summarize the files we created.\",\n  \"when_busy\": \"queue\"\n}\n```\n\nA `202` response means the run was accepted. Read `GET /v1/sessions/:session/runs/:run` for its final `status`, `output_text`, `error`, and `usage`. `when_busy` is required: `queue` waits behind existing work; `reject` returns `409` when the session is busy."
+        "body": "The script prints the session and run IDs, both assistant responses, and the downloaded files. Its second message reads the Fibonacci numbers saved by the first run and asks for their sum: **88**. Open [Sessions](#/sessions) in the console, using a token for the same workspace, to inspect the conversation, tool calls, logs, and files.\n\nTo continue a session, submit another `POST /v1/sessions/:session/runs` with:\n\n```json\n{\n  \"input\": \"Read outputs/ and summarize the files we created.\",\n  \"when_busy\": \"queue\"\n}\n```\n\nA `202` response means the run was accepted. Read `GET /v1/sessions/:session/runs/:run` for its final `status`, `output_text`, `error`, and `usage`. `when_busy` is required: `queue` waits behind existing work; `reject` returns `409` when the session is busy."
       },
       {
         "id": "useful-endpoints",

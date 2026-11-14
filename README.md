@@ -52,42 +52,140 @@ The API exposes that same history through a resumable **server-sent event stream
 
 Host Pi Agents on a VPS and call it from your application backend, wherever that backend runs. Your app needs an **API URL** and a **workspace token**. Model provider credentials stay on the agents server.
 
-Create an agent and start a session in the console, then copy its session ID. Set these variables in your backend environment:
+This complete Node.js example creates everything through the API: **agent → environment → session → user message → result → user reply → next result → files**. No console setup or existing session ID is required.
 
-```dotenv
-API_URL=https://agents.example.com
-API_TOKEN=your-workspace-token
-SESSION_ID=your-session-id
+Use **Node.js 22.19+** and a running server with OpenRouter configured. Set these variables in your application's server environment, substituting your own URL and workspace token:
+
+```sh
+export API_URL='https://agents.example.com'
+export API_TOKEN='your-workspace-token'
+export MODEL_PROVIDER='openrouter'
+export MODEL='deepseek/deepseek-v4.1-flash-1017'
 ```
 
-Submit work with standard HTTP. This Node.js example starts a run in that session:
+For local development, use `API_URL=http://127.0.0.1:8080`. You can choose another configured provider/model pair from `GET /v1/capabilities`.
+
+Save the following as `quickstart.mjs` and run `node quickstart.mjs`. It uses Node's built-in HTTP client; no client package is required. Each execution creates a new agent and session and makes two real agent runs.
 
 ```js
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 
-// Keep this key and body if you need to retry this submission.
-const requestId = randomUUID();
-const input = 'Read our previous report and write a concise release summary.';
-const sessionUrl = `${process.env.API_URL}/v1/sessions/${process.env.SESSION_ID}`;
+const base = (process.env.API_URL ?? 'http://127.0.0.1:8080').replace(/\/$/, '');
+const token = process.env.API_TOKEN;
+if (!token) throw new Error('Set API_TOKEN to a workspace token from the server');
+const headers = { Authorization: `Bearer ${token}` };
 
-const response = await fetch(`${sessionUrl}/runs`, {
-  method: 'POST',
-  headers: {
-    Authorization: `Bearer ${process.env.API_TOKEN}`,
-    'Content-Type': 'application/json',
-    'Idempotency-Key': requestId,
+// For a retry, pass the original requestId and the unchanged body.
+async function request(path, body, requestId = randomUUID()) {
+  const response = await fetch(base + path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? headers : {
+      ...headers, 'Content-Type': 'application/json', 'Idempotency-Key': requestId,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+  return response.json();
+}
+
+async function waitForRun(sessionPath, runId) {
+  const runPath = `${sessionPath}/runs/${runId}`;
+  const deadline = Date.now() + 360_000;
+  while (Date.now() < deadline) {
+    const run = await request(runPath);
+    if (run.status === 'completed') return run;
+    if (['failed', 'cancelled', 'waiting'].includes(run.status)) {
+      throw new Error(`${runPath}: ${run.status}; ${run.error?.message ?? 'inspect the run in the console'}`);
+    }
+    await delay(1_000);
+  }
+  throw new Error(`Timed out waiting for ${runPath}; the server may still be working`);
+}
+
+// 1. Create an agent and its first immutable version.
+const agent = await request('/v1/agents', {
+  name: 'Python assistant',
+  config: {
+    provider: process.env.MODEL_PROVIDER ?? 'openrouter',
+    model: process.env.MODEL ?? 'deepseek/deepseek-v4.1-flash-1017',
+    instructions: 'Use Python to verify calculations. Save deliverables under outputs/. Keep replies concise.',
+    tools: ['bash', 'read_file', 'write_file'],
   },
-  body: JSON.stringify({ input, when_busy: 'queue' }),
 });
 
-if (!response.ok) throw new Error(await response.text());
-const run = await response.json();
-console.log(run.id, run.status);
+// 2. Give sessions a managed Docker workspace.
+const environment = await request('/v1/environment-templates', {
+  name: 'Python workspace', type: 'managed',
+});
+
+// 3. Start a conversation pinned to this agent version.
+const session = await request('/v1/sessions', {
+  agent_version_id: agent.latest_version.id,
+  environment_template_id: environment.id,
+});
+const sessionPath = `/v1/sessions/${session.id}`;
+console.log('Session:', session.id); // Store this ID with the conversation in your app.
+
+// 4. Send the user's first message. Persist this key/body to retry safely.
+const firstRequestId = randomUUID();
+const firstMessage = {
+  input: process.env.PROMPT ?? 'Use Python to calculate the first ten Fibonacci numbers starting with 0, 1. Save the code to outputs/fibonacci.py and the numbers to outputs/fibonacci.txt.',
+  when_busy: 'queue',
+};
+console.log('User:', firstMessage.input);
+const firstRun = await request(`${sessionPath}/runs`, firstMessage, firstRequestId);
+console.log('Run:', firstRun.id); // HTTP 202 means accepted; model work is asynchronous.
+
+// 5. Wait for completion and return the assistant's response to your user.
+const firstResult = await waitForRun(sessionPath, firstRun.id);
+console.log('Assistant:', firstResult.output_text);
+
+// 6. The user replies. Reuse the session to keep its conversation and files.
+const replyRequestId = randomUUID();
+const replyMessage = {
+  input: process.env.FOLLOWUP_PROMPT ?? 'Read outputs/fibonacci.txt and tell me the sum of those numbers.',
+  when_busy: 'queue',
+};
+console.log('User:', replyMessage.input);
+const nextRun = await request(`${sessionPath}/runs`, replyMessage, replyRequestId);
+console.log('Run:', nextRun.id);
+const nextResult = await waitForRun(sessionPath, nextRun.id);
+console.log('Assistant:', nextResult.output_text);
+
+// 7. Retrieve the latest run's output snapshots using the same authentication.
+const { data: files } = await request(`${sessionPath}/artifacts`);
+for (const file of files.filter(file => file.run_id === nextRun.id)) {
+  const response = await fetch(base + file.download_url, {
+    headers, signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`Artifact download failed: HTTP ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  console.log(`Downloaded ${file.path} (${bytes.length} bytes)`);
+  // Store these bytes, or return them to the authorized user from your backend.
+}
 ```
 
-A `202` response means the input was accepted and saved. Read `GET /v1/sessions/:session/runs/:run` for completion, or follow `GET /v1/sessions/:session/events?stream=true`. List outputs at `GET /v1/sessions/:session/artifacts`; downloads use the same bearer authentication.
+The user's follow-up reads the saved file in the **same session**. A verified DeepSeek run printed these results (session IDs and user messages omitted):
 
-The [complete runnable example](examples/run.mjs) creates the agent, environment, and session too, follows events, and prints the final result. The API quickstart inside the console walks through the whole flow.
+```text
+Assistant: Done.
+
+- `outputs/fibonacci.py` — computes the sequence iteratively and writes the result.
+- `outputs/fibonacci.txt` — `0 1 1 2 3 5 8 13 21 34`
+Assistant: The sum is **88**.
+Downloaded fibonacci.txt (23 bytes)
+Downloaded fibonacci.py (454 bytes)
+```
+
+Assistant wording and file sizes can vary by model. The downloaded bytes are available in memory for your app to save or return to its user.
+
+A `202` response means a message was accepted and saved. The example polls until the run completes; it stops with an error on `failed`, `cancelled`, or `waiting`. A `waiting` run needs an explicit recovery decision. Timing out in your client does not cancel the server's work. To follow saved progress events instead, use `GET /v1/sessions/:session/events?stream=true`.
+
+In your app, create an agent and environment once and reuse their IDs. Create a session for each new conversation, save its ID with the owning user or record, and send each subsequent user message as another run. Keep each POST's idempotency key and body in your job record so an uncertain response can be retried without duplicating work; generate a new key for a new message.
+
+The [runnable example](examples/run.mjs) contains this same code and is also shown in the console's **Documentation → API quickstart**. From a checkout, with the variables above set, run `npm run example`.
 
 Keep workspace tokens in your backend and authenticate your own app's users there. Keys mapped to one workspace share its data; separate workspaces isolate different apps. This project has its own HTTP contract; OpenAI and Claude SDK compatibility adapters are future work.
 

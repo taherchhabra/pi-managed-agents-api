@@ -282,7 +282,7 @@ test('a missing workspace or failed artifact publication never reports success',
   assert.equal((await f.store.events('tenant-a', session.id, '0')).filter(event => event.type === 'run.completed').length, 0);
 });
 
-test('the runnable example completes through HTTP and the background worker loop', { timeout: 30_000 }, async t => {
+test('the runnable example continues a conversation and downloads artifacts through HTTP', { timeout: 30_000 }, async t => {
   const f = await fixture();
   const model = await modelFixture();
   const worker = new Worker(f.store, model.runtime, f.sandboxes, f.artifacts, { pollMs: 50 });
@@ -290,10 +290,13 @@ test('the runnable example completes through HTTP and the background worker loop
   const address = await f.app.listen({ port: 0, host: '127.0.0.1' });
   worker.start();
   const { stdout } = await promisify(execFile)(process.execPath, ['examples/run.mjs'], {
-    env: { ...process.env, API_URL: address, API_TOKEN: tokenA, PROMPT: 'make a greeting', MODEL_PROVIDER: 'openai', MODEL: 'gpt-4.1-mini' },
+    env: { ...process.env, API_URL: address, API_TOKEN: tokenA, PROMPT: 'make a greeting', FOLLOWUP_PROMPT: 'what did we create', MODEL_PROVIDER: 'openai', MODEL: 'gpt-4.1-mini' },
     timeout: 20_000,
   });
-  assert.match(stdout, /run.completed/);
-  assert.match(stdout, /"status": "completed"/);
-  assert.match(stdout, /"path": "greeting.txt"/);
+  assert.match(stdout, /Assistant: Saved greeting.txt\./);
+  assert.match(stdout, /Assistant: We created greeting.txt with Hello from the Pi SDK!/);
+  assert.match(stdout, /Downloaded greeting.txt \(23 bytes\)/);
+  const runs = (await f.pool.query('SELECT session_id,status FROM runs ORDER BY created_at')).rows;
+  assert.equal(runs.length, 2);
+  assert(runs.every(run => run.status === 'completed' && run.session_id === runs[0].session_id));
 });
