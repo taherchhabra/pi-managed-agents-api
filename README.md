@@ -1,111 +1,185 @@
 # Pi Managed Agents API
 
-A working MVP of a managed agents API built on the **Pi coding agent SDK**. TypeScript, Fastify, PostgreSQL, and Docker supply the service around Pi's model/tool loop.
+**Give your apps agents that run code, keep context, and deliver files. Powered by Pi. Hosted by you.**
 
-It implements immutable agent versions, tenant-scoped sessions, asynchronous runs, idempotent admission, a leased worker, persistent Pi checkpoints, Docker tools, replayable SSE events, cancellation, and downloadable artifacts. A browser console lets you build agents, test real sessions, and inspect runs, tool calls, event logs, and artifacts. The API is native to this project; provider compatibility adapters are future work.
+[![Checks](https://github.com/taherchhabra/pi-managed-agents-api/actions/workflows/check.yml/badge.svg)](https://github.com/taherchhabra/pi-managed-agents-api/actions/workflows/check.yml)
 
-This MVP supports self-hosting for a trusted operator on one Linux VPS. Apps on other servers call its HTTPS API with workspace tokens. The [MVP contract](docs/mvp.md) describes recovery behavior, tested guarantees, and the remaining work before public multi-tenant hosting.
+[Get started](#get-started) · [Connect your app](#connect-your-app) · [Built-in documentation](#documentation-in-your-workspace) · [Architecture](docs/architecture.md)
 
-## Self-host on a VPS
+Useful agents need a place to work, a way to carry context into the next task, and a record of what happened. Pi Managed Agents brings those pieces together in a self-hosted API and browser console built around the **Pi coding agent SDK**.
 
-Install Docker Engine with Compose, Git, and Node.js 22.19+. Point a domain at the VPS and allow TCP 80/443. From the checkout:
+Define an agent, give it a workspace, and send it a task. Pi handles the model and tool loop; the service saves session state, runs code in Docker, records progress, and publishes the resulting files. Your application can call it from any server over HTTPS.
+
+![A completed Release analyst session showing a synthetic analysis task and its generated Python script and report](docs/images/session-workspace.jpg)
+
+*A real DeepSeek run through OpenRouter: synthetic release metrics become a Python analysis and a downloadable report. Screenshots use a separate demo workspace.*
+
+## Build an agent. See it work.
+
+Start with instructions, a model, and the tools your agent needs. Use **OpenAI, Anthropic, or OpenRouter**, including DeepSeek V4.1 Flash 1017 through OpenRouter. The console shows the models available in the installed runtime.
+
+Save a version, select **Test agent**, and send a task. You can build a coding assistant that writes and tests Python, an analyst that turns supplied data into a report, or a writing partner that keeps context through revisions.
+
+Every saved agent version is immutable. Existing sessions keep their original configuration while you try new instructions or models in another session.
+
+![The Pi Agents library with a writing partner, workspace assistant, and release analyst](docs/images/agent-library.jpg)
+
+## Keep the conversation and the workspace
+
+A session connects an agent version to an environment. Send related tasks to the same session to continue the conversation and work with the files it already created.
+
+| You define | The service keeps |
+| --- | --- |
+| **Agent** | Versioned instructions, provider, model, and allowed tools |
+| **Environment** | A managed Docker workspace or a conversation-only session |
+| **Session** | Conversation context, checkpoints, and persistent workspace files |
+| **Run** | One submitted task, its status, output, and reported usage |
+| **Events and artifacts** | Saved execution history and downloadable output snapshots |
+
+Managed workspaces provide **Bash, Python, file reads, and file writes**. Each attempt runs in a fresh container with the session's persistent volume. Files saved under `outputs/` are published as artifacts after a successful run, ready for your app to download.
+
+Disconnecting your app or closing the console does not cancel a run. Reopen the session to inspect its result, or reconnect to the event stream from the last sequence you received. Interrupted worker execution follows an explicit recovery flow; uncertain tool effects are never automatically replayed.
+
+## Follow every run
+
+The console puts the conversation and execution history side by side. Inspect a run's tool calls, expand their arguments and results, search the event log, and preview or download its artifacts. Export the saved session history when you need to investigate a result.
+
+The API exposes that same history through a resumable **server-sent event stream**. These are saved lifecycle, tool, and result events; assistant responses appear when complete.
+
+![The session inspector filtered to tool events beside the completed agent response](docs/images/session-events.jpg)
+
+## Connect your app
+
+Host Pi Agents on a VPS and call it from your application backend, wherever that backend runs. Your app needs an **API URL** and a **workspace token**. Model provider credentials stay on the agents server.
+
+Create an agent and start a session in the console, then copy its session ID. Set these variables in your backend environment:
+
+```dotenv
+API_URL=https://agents.example.com
+API_TOKEN=your-workspace-token
+SESSION_ID=your-session-id
+```
+
+Submit work with standard HTTP. This Node.js example starts a run in that session:
+
+```js
+import { randomUUID } from 'node:crypto';
+
+// Keep this key and body if you need to retry this submission.
+const requestId = randomUUID();
+const input = 'Read our previous report and write a concise release summary.';
+const sessionUrl = `${process.env.API_URL}/v1/sessions/${process.env.SESSION_ID}`;
+
+const response = await fetch(`${sessionUrl}/runs`, {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.API_TOKEN}`,
+    'Content-Type': 'application/json',
+    'Idempotency-Key': requestId,
+  },
+  body: JSON.stringify({ input, when_busy: 'queue' }),
+});
+
+if (!response.ok) throw new Error(await response.text());
+const run = await response.json();
+console.log(run.id, run.status);
+```
+
+A `202` response means the input was accepted and saved. Read `GET /v1/sessions/:session/runs/:run` for completion, or follow `GET /v1/sessions/:session/events?stream=true`. List outputs at `GET /v1/sessions/:session/artifacts`; downloads use the same bearer authentication.
+
+The [complete runnable example](examples/run.mjs) creates the agent, environment, and session too, follows events, and prints the final result. The API quickstart inside the console walks through the whole flow.
+
+Keep workspace tokens in your backend and authenticate your own app's users there. Keys mapped to one workspace share its data; separate workspaces isolate different apps. This project has its own HTTP contract; OpenAI and Claude SDK compatibility adapters are future work.
+
+## Pi at the core, infrastructure you control
+
+The **Pi coding agent SDK** handles model interaction, tool selection, and context management. This service supplies API authentication, asynchronous work, persisted checkpoints, Docker execution, event history, and artifact storage around it.
+
+```mermaid
+flowchart LR
+    App["Your app backend<br/>Any server"] -->|HTTPS| API
+    subgraph VPS["Your VPS"]
+        API["Gateway · API · Console"] <--> DB[(PostgreSQL)]
+        DB <-->|Runs and checkpoints| Worker["Pi worker"]
+        Worker --> Sandbox["Docker workspace"]
+    end
+    Worker <-->|Model calls| Models["OpenAI · Anthropic · OpenRouter"]
+```
+
+The VPS package separates the API from the worker. Only the worker receives model provider keys and Docker access. Tool containers run as a non-root user with a read-only root filesystem, **1 CPU**, **512 MiB RAM**, and networking disabled. Database state, session workspaces, and published artifacts persist on the host.
+
+You operate the service and choose the model provider. The current runtime is pinned to Pi SDK **1.5.2**.
+
+## Get started
+
+### Self-host on a VPS
+
+Use a dedicated Linux VPS with **Docker Engine and Compose**, **Git**, and **Node.js 22.19+**. Point a domain at the server and allow inbound TCP ports **80 and 443**.
 
 ```sh
+git clone https://github.com/taherchhabra/pi-managed-agents-api.git
+cd pi-managed-agents-api
 node scripts/vps.mjs init agents.example.com you@example.com
-# Edit .env.vps and add a model provider key.
+# Add a model provider key to the generated .env.vps file.
 node scripts/vps.mjs up
 ```
 
-The helper generates private credentials and starts Caddy HTTPS, a private PostgreSQL database, the API/console, and a separate Pi worker. Only the worker receives model provider keys and Docker socket access. Session workspaces, artifacts, database state, and certificates persist in Docker volumes. Use the generated workspace token in `.env.vps` to sign in.
+The helper generates private credentials and starts Caddy HTTPS, PostgreSQL, the API/console, and the Pi worker. Open your domain and sign in with the workspace token in `.env.vps` → `API_KEYS`.
 
-Open **Documentation → Self-host on a VPS** on your running instance (`/#/docs/self-hosting`) for DNS, deployment, key management, operations, backups, and limits. **Connect your app** (`/#/docs/connect-your-app`) explains remote integration. Both guides are available before sign-in. The VPS configuration is `compose.vps.yaml`; the default Compose file remains for local development.
+From there, follow **Documentation → Self-host on a VPS** for deployment checks, application tokens, updates, backups, and recovery. **Connect your app** explains how to use the hosted API from another server.
 
-An app backend needs only `API_URL=https://agents.example.com` and its private `API_TOKEN`. It can run on another VPS, a serverless platform, or a laptop. No provider key or Pi installation is needed in the app. Use the [HTTP example](examples/run.mjs) with those variables; keep workspace tokens out of browser/mobile clients.
+### Run locally
 
-`npm run test:deployment` verifies the packaged stack over HTTPS from a separate client container, without model credentials. `npm run test:deployment:live` adds real OpenRouter inference and a follow-up after restarting the services (uses your configured provider credits). Neither command deploys to a public VPS.
-
-## Run locally
-
-Requires Node.js **22.19+**, npm, and Docker with Compose. The sandbox includes Python and Bash; its network is disabled.
+With the same prerequisites and npm, run these commands from the checkout:
 
 ```sh
 npm ci
 docker compose up -d --wait
 docker build -f Dockerfile.sandbox -t pi-managed-sandbox:dev .
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 ```
 
-Edit `.env`: replace the bearer token in `API_KEYS` and set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENROUTER_API_KEY`. Tokens map to tenant IDs. Provider keys remain in the worker and are never passed into the sandbox.
+Edit `.env`: replace the token in `API_KEYS` and set `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`. Then run `npm run dev` and open **http://127.0.0.1:8080**.
 
-```sh
-npm run dev
-```
+Sign in with the workspace token, create an agent, and choose **Test agent**. For a first task, ask it to write and run a Python program and save the results under `outputs/`.
 
-The service builds the console, migrates its schema, and listens on `http://127.0.0.1:8080`. Open that URL and sign in with a token from `API_KEYS` (not a model-provider key). Start with an agent preset or create your own; choose **Test agent**, select a workspace, and send a task. To compile and run JavaScript, use `npm run build` followed by `npm start`.
+## Documentation in your workspace
 
-Select **Documentation** in the console for the built-in [getting-started guide](http://127.0.0.1:8080/#/docs/get-started), API quickstart, concepts, sandbox guide, logs, and local setup. The guides are searchable, include copyable examples, and work before sign-in. The [console guide](docs/console.md) also covers frontend development. For hot reloading, run `npm run dev:api` and `npm run dev:ui` in separate terminals, then visit `http://127.0.0.1:5173`.
+Getting started, API integration, sessions, tools, logs, and VPS operations are documented **inside the UI**, alongside the agents you are building. Search the guides, copy runnable examples, and follow links straight into the console.
 
-In another terminal, set the same bearer token and run the example:
+![The built-in getting-started documentation with agent, session, run, and result guidance](docs/images/documentation.jpg)
 
-```sh
-export API_TOKEN='your-token-from-API_KEYS'
-npm run example
-```
+On a local install, [open Documentation](http://127.0.0.1:8080/#/docs/get-started). Every hosted instance serves the same guides at `/#/docs/get-started`, including before sign-in.
 
-[The example](examples/run.mjs) creates an agent, environment, session, and run; watches durable SSE events; then prints the result and artifact download paths. It defaults to `openai/gpt-4.1-mini`; use `MODEL_PROVIDER=anthropic MODEL=claude-sonnet-4-5 npm run example` for Anthropic. The selected model must exist in the service catalog (Pi's pinned models plus [service additions](src/models.ts)). These calls use your configured provider account.
+## Current scope
 
-For OpenRouter, use `MODEL_PROVIDER=openrouter MODEL=openai/gpt-4.1-mini npm run example`.
+This is an MVP for a trusted operator on **one Linux Docker host**. It includes versioned agents, persistent sessions, queued runs, cancellation, explicit recovery, replayable events, artifacts, a console, and HTTPS deployment. The default stack has one API process and one worker.
 
-[DeepSeek V4.1 Flash 1017](https://openrouter.ai/deepseek/deepseek-v4.1-flash-1017) is available in the console under **OpenRouter**, with model ID `deepseek/deepseek-v4.1-flash-1017`. The console and worker share the same catalog additions. To run its real-model acceptance suite, use `LIVE_MODEL=deepseek/deepseek-v4.1-flash-1017 npm run test:live`.
+Public untrusted-code hosting needs a stronger execution boundary, scoped user permissions, disk and spending quotas, and additional operational hardening. High availability, MCP, custom application tools, approvals, and subagents are future work. The [MVP contract](docs/mvp.md) documents implemented behavior and limits.
 
-## Test with a real model
+<details>
+<summary><strong>Development and verification</strong></summary>
 
-Set `OPENROUTER_API_KEY` in the ignored `.env` file, start PostgreSQL, and build the sandbox image as above. Then run:
-
-```sh
-npm run test:live
-```
-
-The live harness starts an isolated API and worker, calls OpenRouter through the production Pi adapter, and verifies actual model responses, tool execution, artifact contents, persisted conversation/workspace state, SSE replay, tenant isolation, and cancellation. It uses no model fixtures and fails if the key is missing. No separately running API or `API_TOKEN` is needed.
-
-It defaults to `openai/gpt-4.1-mini` (`LIVE_MODEL` overrides it), limits requests and output tokens, saves local evidence under `.data/live-tests/`, and removes its database schema and sandbox volumes afterward. This opt-in command uses provider credits and is separate from ordinary CI. [Live test contract and observed results](docs/live-testing.md).
-
-## Verify without model credentials
-
-With PostgreSQL and the sandbox image available:
+With development PostgreSQL running and the sandbox image built:
 
 ```sh
 npm run check
 npm run build
 ```
 
-Tests use the **real Pi SDK** with a local HTTP/SSE model fixture, real PostgreSQL schemas, and real Docker containers. No provider key or paid model call is needed. Each test creates and drops a separate database schema and removes its sandbox volumes. Set `TEST_DATABASE_URL` to use another PostgreSQL instance where the test user can create schemas.
+The tests use the real Pi SDK, PostgreSQL, and Docker with a local model-response fixture. `npm run test:deployment` also builds the full VPS stack and connects from a separate application container over verified HTTPS. Both run in [GitHub Actions](https://github.com/taherchhabra/pi-managed-agents-api/actions/workflows/check.yml) without model credentials.
 
-The tests cover concurrent admission, tenant isolation, ownership fencing, recovery, checkpoint branches and compaction records, conversation restoration, tool errors, cancellation during generation and shell execution, SSE reconnection, artifact downloads, injected persistence/publication failures, and model-request/token limits. A separate live run through OpenRouter passed all six acceptance checks; direct OpenAI/Anthropic inference remains unverified.
+For real inference, set `OPENROUTER_API_KEY` in your ignored `.env` file:
 
-## API
+```sh
+npm run test:live
+npm run test:deployment:live
+```
 
-API clients authenticate with `Authorization: Bearer <token>`. The same-origin console exchanges that token for an opaque, HttpOnly session cookie. Every `/v1` `POST` also needs `Idempotency-Key`. Retrying the same key and normalized body returns the original response; changing the body returns `409`. A run's `202` response means its input was committed, and its status must be read separately.
+These opt-in tests use provider credits. The live suites verify model responses, Docker tools, artifacts, saved state, and follow-up work. The deployment suite also restarts the API, worker, and database before continuing the session. OpenRouter inference has been verified with GPT-4.1 mini and DeepSeek V4.1 Flash 1017; direct OpenAI and Anthropic inference remains unverified. [Live test details](docs/live-testing.md).
 
-| Resource | Endpoints |
-| --- | --- |
-| Agents | `POST/GET /v1/agents`, `GET /v1/agents/:id`, `POST /v1/agents/:id/versions` |
-| Environments | `POST/GET /v1/environment-templates`, `GET /v1/environment-templates/:id` |
-| Sessions | `POST/GET /v1/sessions`, `GET /v1/sessions/:id`, `POST /v1/sessions/:id/archive` |
-| Runs | `POST/GET /v1/sessions/:id/runs`, `GET /v1/sessions/:id/runs/:run`, `POST .../:run/cancel`, `POST .../:run/resume` |
-| Events | `GET /v1/sessions/:id/events?after=0`, add `stream=true` for SSE |
-| Artifacts | `GET /v1/sessions/:id/artifacts`, `GET /v1/sessions/:id/artifacts/:artifact/content` |
-| Capabilities | `GET /v1/capabilities` (installed model catalog and provider configuration flags) |
+For UI development, run `npm run dev:api` and `npm run dev:ui` separately. The Vite UI is available at `http://127.0.0.1:5173`. [Console development guide](docs/console.md).
 
-Run admission takes `{ "input": "...", "when_busy": "queue" }` or `"reject"`. Cancellation, resume, and archive take `{}`. SSE uses session sequence strings as IDs and accepts `Last-Event-ID`. Disconnection does not cancel a run. [Complete request examples and behavior](docs/mvp.md).
+</details>
 
-## Design and layout
-
-- [Provider architecture research](docs/provider-architecture.md) compares the reference products and their operational contracts.
-- [Proposed Pi architecture](docs/architecture.md) describes the runtime boundary, resources, persistence, recovery, and implementation stages.
-- [MVP contract](docs/mvp.md) distinguishes implemented behavior from that proposal.
-- [Console guide](docs/console.md) documents the browser workflows and verification.
-
-`src/api.ts` owns admission and reads, `src/store.ts` owns transactional state, `src/worker.ts` coordinates execution, `src/runtime.ts` embeds Pi, and `src/sandbox.ts` supplies the Docker executor. `src/artifacts.ts` stores immutable output bytes outside the workspace. `src/console.ts` supplies console authentication and static hosting; `ui/` contains the React/Vite application.
-
-The SDK is pinned to `@earendil-works/pi-coding-agent@1.5.2`. Persistence, recovery, and managed execution belong to this service; no durable-harness dependency is used.
+The design draws on the session-oriented approach described in the [OpenAI Agents API launch](https://openai.com/index/introducing-the-agents-api/) and [Claude Managed Agents launch](https://claude.com/resources/articles/claude-managed-agents). See the [provider architecture research](docs/provider-architecture.md) and [Pi architecture](docs/architecture.md) for the design decisions behind this implementation.
