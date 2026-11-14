@@ -4,7 +4,7 @@
 
 [![Checks](https://github.com/taherchhabra/pi-managed-agents-api/actions/workflows/check.yml/badge.svg)](https://github.com/taherchhabra/pi-managed-agents-api/actions/workflows/check.yml)
 
-[Get started](#get-started) · [Connect your app](#connect-your-app) · [Built-in documentation](#documentation-in-your-workspace) · [Architecture](docs/architecture.md)
+[Get started](#get-started) · [Comparison](#how-it-compares) · [Connect your app](#connect-your-app) · [Built-in documentation](#documentation-in-your-workspace) · [Architecture](docs/architecture.md)
 
 Useful agents need a place to work, a way to carry context into the next task, and a record of what happened. Pi Managed Agents brings those pieces together in a self-hosted API and browser console built around the **Pi coding agent SDK**.
 
@@ -13,6 +13,33 @@ Define an agent, give it a workspace, and send it a task. Pi handles the model a
 ![A completed Release analyst session showing a synthetic analysis task and its generated Python script and report](docs/images/session-workspace.jpg)
 
 *A real DeepSeek run through OpenRouter: synthetic release metrics become a Python analysis and a downloadable report. Screenshots use a separate demo workspace.*
+
+## How it compares
+
+Compared with official documentation on **14 November 2026**. The Pi column describes the **implemented MVP**. Vendor columns describe their hosted services, with self-hosting options called out separately. Links in the table point to the relevant vendor documentation.
+
+| Capability | Pi Managed Agents API — current MVP | OpenAI Agents API | Claude Managed Agents API |
+| --- | --- | --- | --- |
+| Agent harness | Pi coding agent SDK | [Managed Codex harness](https://developers.openai.com/api/docs/guides/agents-api/architecture) | [Configurable Claude harness](https://platform.claude.com/docs/en/managed-agents/overview) |
+| Host the API, harness, and session storage yourself | **Yes.** Docker Compose deployment on one Linux VPS | [OpenAI runs the service; self-hosted sandboxes move tool execution to your infrastructure](https://developers.openai.com/api/docs/guides/agents-api/architecture) | Hosted service, or [self-hosted service and sandboxes](https://platform.claude.com/docs/en/managed-agents/self-hosted) |
+| Model choices | OpenAI, Anthropic, and OpenRouter catalogs; includes DeepSeek | [OpenAI models supported by the API](https://developers.openai.com/api/docs/guides/agents-api/configuration) | [Claude models](https://platform.claude.com/docs/en/managed-agents/overview); self-hosted service also supports [a choice of inference backend](https://platform.claude.com/docs/en/managed-agents/self-hosted) |
+| Reusable agents | Immutable versions; sessions pin a version | [Saved or inline configuration; sessions copy saved settings](https://developers.openai.com/api/docs/guides/agents-api/configuration) | [Versioned agent definitions](https://platform.claude.com/docs/en/managed-agents/agent-setup) |
+| Sessions and follow-up messages | **Yes.** Persistent context, queued runs, and follow-ups; five-minute limit per run | [Persistent sessions with asynchronous turns and follow-ups](https://developers.openai.com/api/docs/guides/agents-api/sessions) | [Stateful sessions with asynchronous user events](https://platform.claude.com/docs/en/managed-agents/overview) |
+| Code execution and workspace | Docker with Bash, Python, file tools, and a persistent volume; sandbox networking disabled | [Hosted, self-hosted, or no environment](https://developers.openai.com/api/docs/guides/agents-api/architecture) | [Cloud sandboxes](https://platform.claude.com/docs/en/managed-agents/environments) or [self-hosted execution](https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes) |
+| File inputs and outputs | Downloads of published `outputs/` snapshots; **no input-upload API yet** | [Uploads and published artifacts for hosted environments; self-hosted files use your infrastructure](https://developers.openai.com/api/docs/guides/agents-api/environments/files) | [Upload, mount, and download session files](https://platform.claude.com/docs/en/managed-agents/files) |
+| Streaming and history | Saved lifecycle/tool/result events over resumable SSE; **no token deltas yet** | [Live SSE with text deltas; saved items and turns for history](https://developers.openai.com/api/docs/guides/agents-api/sessions/events) | [Live text previews plus persisted completed events](https://platform.claude.com/docs/en/managed-agents/event-deltas) |
+| Console and logs | Agent testing, session inspector, tool calls, log export, artifacts, and built-in docs | [Dashboard session logs, turn traces, and usage](https://developers.openai.com/api/docs/guides/agents-api/observability) | [Console session viewer, tool inspection, event export, and usage](https://platform.claude.com/docs/en/managed-agents/session-observability) |
+| MCP and custom application tools | **Not yet.** Fixed `bash`, `read_file`, and `write_file` tools | [Function tools](https://developers.openai.com/api/docs/guides/agents-api/tools/functions) and [MCP connections](https://developers.openai.com/api/docs/guides/agents-api/tools/mcp) | [Custom tools and MCP](https://platform.claude.com/docs/en/managed-agents/tools) |
+| Steering and cancellation | Cancellation supported; new messages queue or reject while busy; **no mid-run steering** | [Steer an active turn or cancel it](https://developers.openai.com/api/docs/guides/agents-api/sessions) | [Steer or interrupt with user events](https://platform.claude.com/docs/en/managed-agents/overview) |
+| Subagents and orchestration | **Not yet.** One agent per session; one run at a time per worker | [Parallel subagents with separate context](https://developers.openai.com/api/docs/guides/agents-api/multi-agent) | [Subagents, threads, and dynamic workflows](https://platform.claude.com/docs/en/managed-agents/multiagent-orchestration) |
+| Tool approvals | **Not yet.** Enabled tools execute within fixed sandbox restrictions | [Automatic review for supported approval requests](https://developers.openai.com/api/docs/guides/agents-api/sessions/approvals) | [Allow, ask, or automatic permission policies](https://platform.claude.com/docs/en/managed-agents/permission-policies) |
+| Scheduling and webhooks | **Not yet.** Your app submits runs and polls or streams results | [Scheduled automations](https://developers.openai.com/api/docs/guides/agents-api/sessions/automations) and [session webhooks](https://developers.openai.com/api/docs/guides/agents-api/sessions/webhooks) | [Scheduled deployments](https://platform.claude.com/docs/en/managed-agents/scheduled-deployments) and [webhooks](https://platform.claude.com/docs/en/managed-agents/webhooks) |
+| Failure recovery | Explicit `waiting` state; reconcile tool effects before retrying; **no automatic tool replay** | [Inspect saved state and tool effects before retrying failed work](https://developers.openai.com/api/docs/guides/agents-api/errors) | [Automatic rescheduling for transient errors; termination for unrecoverable errors](https://platform.claude.com/docs/en/managed-agents/webhooks) |
+| Client integration | Own HTTP API and runnable Node.js example; **no OpenAI/Claude SDK compatibility** | [OpenAI SDK session APIs](https://developers.openai.com/api/docs/guides/agents-api/sessions) | [Anthropic SDK and CLI; same API for its self-hosted service, with exceptions](https://platform.claude.com/docs/en/managed-agents/self-hosted) |
+
+Claude's self-hosted service currently omits the Files API, scheduled deployments, and webhooks, and limits delegation to predefined subagents; see its [documented feature differences](https://platform.claude.com/docs/en/managed-agents/self-hosted/differences). Hosting the whole service and hosting only a sandbox are separate options. Pi runs its service locally, while model requests go to the configured provider. Real inference has been tested through OpenRouter; direct OpenAI and Anthropic inference remains unverified.
+
+Pi currently suits a trusted operator who wants a Pi-based runtime, provider choice, and a console on their own VPS. It does not yet provide high availability, per-user roles, spending quotas, or a hardened public execution service. See the [implemented contract and limits](docs/mvp.md) for the exact scope.
 
 ## Build an agent. See it work.
 
