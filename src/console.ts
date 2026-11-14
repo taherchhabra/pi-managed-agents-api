@@ -60,7 +60,7 @@ export function installConsole(
       .header("Referrer-Policy", "no-referrer")
       .header(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
       );
     if (!reply.hasHeader("Cache-Control"))
       reply.header("Cache-Control", "no-store");

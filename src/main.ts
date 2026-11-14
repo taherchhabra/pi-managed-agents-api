@@ -6,6 +6,7 @@ import { piRuntime } from './runtime.js';
 import { DockerSandboxProvider } from './sandbox.js';
 import { Store } from './store.js';
 import { Worker } from './worker.js';
+import { DesktopClient, EnvironmentSandboxProvider } from './desktop/client.js';
 
 const config = loadConfig();
 const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 10, connectionTimeoutMillis: 5000, statement_timeout: 15_000 });
@@ -13,8 +14,10 @@ pool.on('error', () => console.error('PostgreSQL pool connection failed'));
 const store = new Store(pool);
 await store.migrate();
 const artifacts = new ArtifactStore(config.artifactDir);
-const app = config.role === 'worker' ? undefined : buildApi(store, artifacts, config, true);
-const worker = config.role === 'api' ? undefined : new Worker(store, piRuntime({ keys: config.providerKeys }), new DockerSandboxProvider(), artifacts, {
+const desktop = config.desktopUrl ? new DesktopClient(config.desktopUrl, config.desktopToken!) : undefined;
+const sandboxes = new EnvironmentSandboxProvider(new DockerSandboxProvider(), desktop, id => store.environmentType(id));
+const app = config.role === 'worker' ? undefined : buildApi(store, artifacts, { ...config, desktop }, true);
+const worker = config.role === 'api' ? undefined : new Worker(store, piRuntime({ keys: config.providerKeys }), sandboxes, artifacts, {
   onError: () => console.error('Worker operation failed; retrying after the polling interval'),
 });
 let stopping = false;

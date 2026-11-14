@@ -8,6 +8,8 @@
 !ui/**
 !examples/
 !examples/**
+!docs/
+!docs/desktop.md
 !deploy/
 !deploy/health.mjs
 !Dockerfile

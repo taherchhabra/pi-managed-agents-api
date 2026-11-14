@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 export const SDK_VERSION = '1.5.2';
-export type ToolName = 'bash' | 'read_file' | 'write_file';
+export type ToolName = 'bash' | 'read_file' | 'write_file' | 'AX' | 'GUI';
+export type EnvironmentType = 'none' | 'managed' | 'desktop';
 export interface AgentConfig {
   provider: 'openai' | 'anthropic' | 'openrouter';
   model: string;
@@ -24,11 +25,12 @@ export interface Job {
   epoch: number;
   owner: string;
   config: AgentConfig;
-  environment: { type: 'none' | 'managed'; image: string | null };
+  environment: { type: EnvironmentType; image: string | null };
   checkpoint: Checkpoint | null;
   workspace_initialized: boolean;
 }
-export interface ToolResult { text: string; isError?: boolean }
+export interface ToolImage { data: string; mimeType: 'image/jpeg'; width: number; height: number }
+export interface ToolResult { text: string; isError?: boolean; images?: ToolImage[] }
 export interface ArtifactData { path: string; bytes: Buffer }
 export class ApiError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }

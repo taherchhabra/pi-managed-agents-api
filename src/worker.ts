@@ -87,7 +87,7 @@ export class Worker {
       for (const result of results) if (result.status === 'rejected') throw result.reason;
     };
     try {
-      if (job.environment.type === 'managed') {
+      if (job.environment.type !== 'none') {
         sandbox = await this.sandboxes.open(job, controller.signal);
         // A slow provision can outlive a lease. Verify again before any model/tool work.
         await this.store.workspaceReady(job);
@@ -100,7 +100,13 @@ export class Worker {
           await this.store.startTool(job, call, name, args, checkpoint);
           controller.signal.throwIfAborted();
           const result = await sandbox.execute(name, args, controller.signal);
-          await this.store.endTool(job, call, result);
+          const images = [];
+          for (const image of result.images ?? []) {
+            const bytes = Buffer.from(image.data, 'base64');
+            if (bytes.length > 1024 * 1024 || image.mimeType !== 'image/jpeg') throw new Error('Invalid desktop screenshot');
+            images.push({ ...await this.artifacts.publish({ path: 'screenshot.jpg', bytes }), width: image.width, height: image.height });
+          }
+          await this.store.endTool(job, call, result, images);
           return result;
         },
       });

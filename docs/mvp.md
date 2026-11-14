@@ -1,6 +1,8 @@
 # MVP contract
 
-Implementation baseline: 14 November 2026. This document describes the current code; [architecture.md](architecture.md) also contains future work.
+Implementation baseline: 15 November 2026. This document describes the current code; [architecture.md](architecture.md) also contains future work.
+
+Optional Linux desktops use QEMU/KVM and HCU. See [Desktop design and setup](desktop.md) for their lifecycle; Docker-specific details below apply to managed container environments.
 
 ## Deployment
 
@@ -44,7 +46,7 @@ Create an environment with `POST /v1/environment-templates`:
 { "name": "Python sandbox", "type": "managed" }
 ```
 
-The other supported type is `none`; it requires an agent with an empty tools list. A session uses the version and environment IDs returned above:
+The other supported types are `none` (requires an empty tools list) and `desktop` (requires a configured desktop host). HCU `AX` and `GUI` tools require a desktop environment and a vision model. A session uses the version and environment IDs returned above:
 
 ```json
 {
@@ -69,9 +71,9 @@ Errors use `{ "error": { "code": "...", "message": "..." } }`. Invalid payloads 
 
 The adapter embeds Pi SDK 1.5.2 through `createAgentSession()`, with explicit model/auth, in-memory settings and session manager, an empty resource loader, and a fixed tool allowlist. It loads no user extensions, skills, MCP servers, project instructions, or ambient Pi auth files. Public inputs cannot set provider endpoints or install executable extensions.
 
-The only active tools are platform implementations of `bash`, `read_file`, and `write_file`, dispatched through Docker. The custom `bash` replaces Pi's host implementation. A tool wrapper commits the full session checkpoint and tool intent before dispatch, then commits the result before returning to Pi. SDK event callbacks are not used as database barriers. Normal shell exit failures and file errors return to the model so it can correct them; persistence and executor failures abort the attempt.
+The active tools are platform implementations of `bash`, `read_file`, and `write_file`, plus HCU's native `AX` and `GUI`. Shell/file tools dispatch to the session's Docker container or desktop VM; HCU runs only in desktop VMs. The custom `bash` replaces Pi's host implementation. A tool wrapper commits the session checkpoint and tool intent before dispatch, then commits the result before returning to Pi. SDK event callbacks are not used as database barriers. Normal shell exit failures and file errors return to the model so it can correct them; persistence and executor failures abort the attempt.
 
-Checkpoints include the Pi session header, complete entry tree, active leaf, checkpoint schema, and SDK version. Configuration is pinned by the session's immutable agent version. Restore uses `SessionManager.inMemory()` and restores its branch, including compaction records. Completed runs produce a checkpoint before the service commits their result and terminal event. Runtime-version mismatches are rejected.
+Checkpoints include the Pi session header, entry tree, active leaf, checkpoint schema, and SDK version. They retain four recent image payloads; earlier image blocks become text references while the original captures remain in session events. Configuration is pinned by the session's immutable agent version. Restore uses `SessionManager.inMemory()` and restores its branch, including compaction records. Completed runs produce a checkpoint before the service commits their result and terminal event. Runtime-version mismatches are rejected.
 
 The worker waits for `prompt()` and idle settlement, observes `agent_settled`, and checks the final assistant stop reason before reporting success. Provider errors, aborted generation, incomplete responses, or missing required artifacts cannot be classified as completed runs.
 
@@ -88,20 +90,21 @@ Usage is the difference in Pi session statistics across a successful run. It inc
 | Tool execution | Sequential |
 | Bash command | 30 seconds; returned output truncated at 64 KiB |
 | File read/write | 64 KiB UTF-8, paths confined to `/workspace` |
-| Sandbox | Non-root, no network, read-only root, no added capabilities, 1 CPU, 512 MiB RAM, 128 processes |
+| Docker sandbox | Non-root, no network, read-only root, no added capabilities, 1 CPU, 512 MiB RAM, 128 processes |
+| Desktop VM | Ubuntu/Xfce, no network, 2 vCPUs, 1536 MiB RAM by default; paused between runs |
 | Temporary files | 64 MiB `/tmp` |
 | Artifact export | 20 regular files, 5 MiB each, 20 MiB total |
 | Session checkpoint | 16 MiB |
 
-Each session owns a persistent Docker volume. A fresh execution container is created per attempt and removed before a terminal state is committed. Provider keys, the Docker socket, and host directories are not mounted into the sandbox. Containers provide development isolation; this is not a hardened public execution service. Workspace volume disk usage has no quota in this MVP.
+Each managed container session owns a persistent Docker volume. A fresh execution container is created per attempt and removed before a terminal state is committed. Provider keys, the Docker socket, and host directories are not mounted into the sandbox. Containers provide development isolation; this is not a hardened public execution service. Workspace volume disk usage has no quota in this MVP.
 
-On success, the worker stops all agent processes, then mounts the workspace read-only in a separate export container. Files under `/workspace/outputs` become artifacts; symlinks are omitted and special files are rejected. Every successful run exports the directory's current contents, including unchanged files from earlier runs. Stored bytes are SHA-256-addressed and verified on publication and download. Metadata, artifact events, the checkpoint, and `run.completed` commit atomically after all byte writes finish. Failed transactions can leave unreferenced object files for future garbage collection.
+For Docker sessions, the worker stops all agent processes on success, then mounts the workspace read-only in a separate export container. Files under `/workspace/outputs` become artifacts; symlinks are omitted and special files are rejected. Every successful run exports the directory's current contents, including unchanged files from earlier runs. Stored bytes are SHA-256-addressed and verified on publication and download. Metadata, artifact events, the checkpoint, and `run.completed` commit atomically after all byte writes finish. Failed transactions can leave unreferenced object files for future garbage collection.
 
 Downloads require the same tenant authentication as the session; a digest or artifact ID grants no access. Artifacts remain available after archive. Archiving requires no pending runs and prevents new runs. The worker asynchronously removes its containers and workspace volume, retrying cleanup after failures. Database history and artifacts currently have no expiry or deletion API.
 
 ## Recovery and cancellation
 
-Database writes and tool admission require the current unexpired owner epoch. When a lease expires, recovery first stops that generation's Docker containers while holding the session lock, then marks the run `waiting` with `recovery_required`. A stop failure leaves recovery pending. An old worker cannot commit checkpoints, tool results, or completion after ownership changes.
+Database writes and tool admission require the current unexpired owner epoch. When a lease expires, recovery first stops that generation's Docker containers or fences and pauses its desktop VM while holding the session lock, then marks the run `waiting` with `recovery_required`. A stop failure leaves recovery pending. An old worker cannot commit checkpoints, tool results, or completion after ownership changes.
 
 There is **no automatic prompt or tool replay**. `POST .../runs/:run/resume` with `{}` supports interrupted runs that have never dispatched tools: it restores the checkpoint from before the run and retries the original input as a new attempt. This can repeat a model request and its charge. Any recorded tool dispatch makes resume return `409 reconciliation_required`, even when the result was recorded. Supporting replay of reconciled tool calls is future work.
 
@@ -129,4 +132,4 @@ Streaming currently covers durable lifecycle, tool, and result events. Token del
 
 Before public multi-tenant hosting: hardened remote executors and workspace snapshots, disk/concurrency/spend quotas, credential mediation, user identity and scoped authentication, high availability and disaster-recovery automation, retention and object cleanup, broader crash testing, and SDK/runtime upgrade procedures. The supplied one-VPS deployment includes TLS and manual backup/restore guidance, but does not establish those broader guarantees.
 
-Features still planned include steering, approvals, external tools, MCP, webhooks/outbox delivery, child threads, input uploads, session configuration updates, self-hosted executors, client SDKs, and OpenAI/Claude compatibility adapters. Their proposed routes in the architecture document are not implemented endpoints.
+Features still planned include steering, approvals, external tools, MCP, webhooks/outbox delivery, child threads, input uploads, session configuration updates, additional executor providers, client SDKs, and OpenAI/Claude compatibility adapters. Their proposed routes in the architecture document are not implemented endpoints.

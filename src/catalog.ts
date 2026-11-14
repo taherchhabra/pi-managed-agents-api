@@ -24,6 +24,7 @@ export async function modelCatalog() {
           id: model.id,
           name: model.name,
           context_window: model.contextWindow,
+          input: model.input,
         })),
     }));
   } finally {

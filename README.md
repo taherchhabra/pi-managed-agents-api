@@ -8,15 +8,27 @@
 
 Useful agents need a place to work, a way to carry context into the next task, and a record of what happened. Pi Managed Agents brings those pieces together in a self-hosted API and browser console built around the **Pi coding agent SDK**.
 
-Define an agent, give it a workspace, and send it a task. Pi handles the model and tool loop; the service saves session state, runs code in Docker, records progress, and publishes the resulting files. Your application can call it from any server over HTTPS.
+Define an agent, give it a workspace, and send it a task. Pi handles the model and tool loop; the service saves session state, runs code in Docker or operates a Linux desktop, records progress, and publishes the resulting files. Your application can call it from any server over HTTPS.
 
 ![A completed Release analyst session showing a synthetic analysis task and its generated Python script and report](docs/images/session-workspace.jpg)
 
 *A real DeepSeek run through OpenRouter: synthetic release metrics become a Python analysis and a downloadable report. Screenshots use a separate demo workspace.*
 
+## Give an agent a Linux desktop
+
+Choose **Desktop assistant**, select a vision model, and start a **Linux desktop** session. Pi uses [Microsoft HCU](https://github.com/microsoft/Hybrid-Computer-Use) to inspect accessibility controls and screenshots, then operate real applications inside a QEMU/KVM VM. The console shows a live preview and saves the model’s observations alongside its tool calls.
+
+Apps and files stay with the session between runs. A desktop can run on a separate KVM server while your API stays on a VPS. Linux is supported first; networking is disabled, and the preview is read-only. Windows and macOS providers are not implemented.
+
+Open **Docs → Linux desktops & HCU** in the app for setup and the API guide. The same guide is in [docs/desktop.md](docs/desktop.md).
+
+[![A real DeepSeek agent continuing work in a persistent Linux desktop through HCU](docs/images/session-desktop.jpg)](docs/images/desktop-preview.jpg)
+
+*The agent created a note in Mousepad, saved it through the GUI, then resumed the same desktop and appended a second line. Screenshots and the saved file are available in the session.*
+
 ## How it compares
 
-Compared with official documentation on **14 November 2026**. The Pi column describes the **implemented MVP**. Vendor columns describe their hosted services, with self-hosting options called out separately. Links in the table point to the relevant vendor documentation.
+Vendor documentation checked on **14 November 2026**; the Pi column reflects the **implemented MVP as of 15 November 2026**. Vendor columns describe their hosted services, with self-hosting options called out separately. Links in the table point to the relevant vendor documentation.
 
 | Capability | Pi Managed Agents API — current MVP | OpenAI Agents API | Claude Managed Agents API |
 | --- | --- | --- | --- |
@@ -25,11 +37,11 @@ Compared with official documentation on **14 November 2026**. The Pi column desc
 | Model choices | OpenAI, Anthropic, and OpenRouter catalogs; includes DeepSeek | [OpenAI models supported by the API](https://developers.openai.com/api/docs/guides/agents-api/configuration) | [Claude models](https://platform.claude.com/docs/en/managed-agents/overview); self-hosted service also supports [a choice of inference backend](https://platform.claude.com/docs/en/managed-agents/self-hosted) |
 | Reusable agents | Immutable versions; sessions pin a version | [Saved or inline configuration; sessions copy saved settings](https://developers.openai.com/api/docs/guides/agents-api/configuration) | [Versioned agent definitions](https://platform.claude.com/docs/en/managed-agents/agent-setup) |
 | Sessions and follow-up messages | **Yes.** Persistent context, queued runs, and follow-ups; five-minute limit per run | [Persistent sessions with asynchronous turns and follow-ups](https://developers.openai.com/api/docs/guides/agents-api/sessions) | [Stateful sessions with asynchronous user events](https://platform.claude.com/docs/en/managed-agents/overview) |
-| Code execution and workspace | Docker with Bash, Python, file tools, and a persistent volume; sandbox networking disabled | [Hosted, self-hosted, or no environment](https://developers.openai.com/api/docs/guides/agents-api/architecture) | [Cloud sandboxes](https://platform.claude.com/docs/en/managed-agents/environments) or [self-hosted execution](https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes) |
+| Code execution and workspace | Docker workspaces or optional Linux desktops on QEMU/KVM with HCU; Bash, Python and persistent files; networking disabled | [Hosted, self-hosted, or no environment](https://developers.openai.com/api/docs/guides/agents-api/architecture) | [Cloud sandboxes](https://platform.claude.com/docs/en/managed-agents/environments) or [self-hosted execution](https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes) |
 | File inputs and outputs | Downloads of published `outputs/` snapshots; **no input-upload API yet** | [Uploads and published artifacts for hosted environments; self-hosted files use your infrastructure](https://developers.openai.com/api/docs/guides/agents-api/environments/files) | [Upload, mount, and download session files](https://platform.claude.com/docs/en/managed-agents/files) |
 | Streaming and history | Saved lifecycle/tool/result events over resumable SSE; **no token deltas yet** | [Live SSE with text deltas; saved items and turns for history](https://developers.openai.com/api/docs/guides/agents-api/sessions/events) | [Live text previews plus persisted completed events](https://platform.claude.com/docs/en/managed-agents/event-deltas) |
 | Console and logs | Agent testing, session inspector, tool calls, log export, artifacts, and built-in docs | [Dashboard session logs, turn traces, and usage](https://developers.openai.com/api/docs/guides/agents-api/observability) | [Console session viewer, tool inspection, event export, and usage](https://platform.claude.com/docs/en/managed-agents/session-observability) |
-| MCP and custom application tools | **Not yet.** Fixed `bash`, `read_file`, and `write_file` tools | [Function tools](https://developers.openai.com/api/docs/guides/agents-api/tools/functions) and [MCP connections](https://developers.openai.com/api/docs/guides/agents-api/tools/mcp) | [Custom tools and MCP](https://platform.claude.com/docs/en/managed-agents/tools) |
+| MCP and custom application tools | Fixed Bash/file tools plus built-in HCU `AX`/`GUI` integration; **no user-configurable MCP servers or custom tools yet** | [Function tools](https://developers.openai.com/api/docs/guides/agents-api/tools/functions) and [MCP connections](https://developers.openai.com/api/docs/guides/agents-api/tools/mcp) | [Custom tools and MCP](https://platform.claude.com/docs/en/managed-agents/tools) |
 | Steering and cancellation | Cancellation supported; new messages queue or reject while busy; **no mid-run steering** | [Steer an active turn or cancel it](https://developers.openai.com/api/docs/guides/agents-api/sessions) | [Steer or interrupt with user events](https://platform.claude.com/docs/en/managed-agents/overview) |
 | Subagents and orchestration | **Not yet.** One agent per session; one run at a time per worker | [Parallel subagents with separate context](https://developers.openai.com/api/docs/guides/agents-api/multi-agent) | [Subagents, threads, and dynamic workflows](https://platform.claude.com/docs/en/managed-agents/multiagent-orchestration) |
 | Tool approvals | **Not yet.** Enabled tools execute within fixed sandbox restrictions | [Automatic review for supported approval requests](https://developers.openai.com/api/docs/guides/agents-api/sessions/approvals) | [Allow, ask, or automatic permission policies](https://platform.claude.com/docs/en/managed-agents/permission-policies) |
@@ -58,7 +70,7 @@ A session connects an agent version to an environment. Send related tasks to the
 | You define | The service keeps |
 | --- | --- |
 | **Agent** | Versioned instructions, provider, model, and allowed tools |
-| **Environment** | A managed Docker workspace or a conversation-only session |
+| **Environment** | A Docker workspace, a Linux desktop VM, or a conversation-only session |
 | **Session** | Conversation context, checkpoints, and persistent workspace files |
 | **Run** | One submitted task, its status, output, and reported usage |
 | **Events and artifacts** | Saved execution history and downloadable output snapshots |
@@ -218,7 +230,7 @@ Keep workspace tokens in your backend and authenticate your own app's users ther
 
 ## Pi at the core, infrastructure you control
 
-The **Pi coding agent SDK** handles model interaction, tool selection, and context management. This service supplies API authentication, asynchronous work, persisted checkpoints, Docker execution, event history, and artifact storage around it.
+The **Pi coding agent SDK** handles model interaction, tool selection, and context management. This service supplies API authentication, asynchronous work, persisted checkpoints, Docker or desktop execution, event history, and artifact storage around it.
 
 ```mermaid
 flowchart LR
@@ -229,6 +241,9 @@ flowchart LR
         Worker --> Sandbox["Docker workspace"]
     end
     Worker <-->|Model calls| Models["OpenAI · Anthropic · OpenRouter"]
+    Worker --> Desktop["Optional KVM desktop host"]
+    API -->|Preview| Desktop
+    Desktop --> VM["Session VM · Xfce · HCU"]
 ```
 
 The VPS package separates the API from the worker. Only the worker receives model provider keys and Docker access. Tool containers run as a non-root user with a read-only root filesystem, **1 CPU**, **512 MiB RAM**, and networking disabled. Database state, session workspaces, and published artifacts persist on the host.
@@ -290,7 +305,7 @@ If the server is already running, restart `npm run dev` after changing `.env`; f
 
 ## Documentation in your workspace
 
-Getting started, API integration, sessions, tools, logs, and VPS operations are documented **inside the UI**, alongside the agents you are building. Find your workspace token, follow the complete agent-to-session walkthrough, and learn how to inspect tool calls, events, and files. Search the guides, copy runnable examples, and follow links straight into the console.
+Getting started, API integration, sessions, tools, logs, VPS operations, and HCU desktop setup are documented **inside the UI**, alongside the agents you are building. Find your workspace token, follow the complete agent-to-session walkthrough, and learn how to inspect tool calls, events, and files. Search the guides, copy runnable examples, and follow links straight into the console.
 
 ![The built-in getting-started guide with larger text, dark navigation, and workspace setup instructions](docs/images/documentation.jpg)
 

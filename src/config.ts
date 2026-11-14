@@ -15,6 +15,8 @@ export interface Config {
   rateLimitMax: number;
   loginRateLimitMax: number;
   consoleOrigin?: string;
+  desktopUrl?: string;
+  desktopToken?: string;
 }
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!env.DATABASE_URL) throw new Error('DATABASE_URL is required');
@@ -35,6 +37,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const port = Number(env.PORT ?? 8080);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be 1–65535');
   const consoleOrigin = env.CONSOLE_ORIGIN;
+  const desktopUrl = env.DESKTOP_HOST_URL;
+  const desktopToken = env.DESKTOP_HOST_TOKEN;
+  if (desktopUrl || desktopToken) {
+    if (!desktopUrl || !desktopToken || desktopToken.length < 32) throw new Error('Set DESKTOP_HOST_URL and a DESKTOP_HOST_TOKEN of 32+ characters together');
+    const url = new URL(desktopUrl);
+    if (!['http:', 'https:'].includes(url.protocol) || url.origin !== desktopUrl) throw new Error('DESKTOP_HOST_URL must be an http(s) origin');
+  }
   if (consoleOrigin) {
     try {
       const url = new URL(consoleOrigin);
@@ -43,7 +52,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   return { databaseUrl: env.DATABASE_URL, apiKeys, host: env.HOST ?? '127.0.0.1', port,
     role: role as Config['role'], artifactDir: resolve(env.ARTIFACT_DIR ?? '.data/artifacts'),
-    sandboxImage: env.SANDBOX_IMAGE ?? 'pi-managed-sandbox:dev', consoleOrigin,
+    sandboxImage: env.SANDBOX_IMAGE ?? 'pi-managed-sandbox:dev', consoleOrigin, desktopUrl, desktopToken,
     trustProxyHops: integer('TRUST_PROXY_HOPS', 0, 0, 10),
     rateLimitMax: integer('RATE_LIMIT_MAX', 600, 1, 100_000),
     loginRateLimitMax: integer('LOGIN_RATE_LIMIT_MAX', 10, 1, 1000),

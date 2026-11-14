@@ -13,6 +13,7 @@ import {
   Plus,
   ShieldCheck,
   Terminal,
+  Monitor,
 } from "lucide-react";
 import { date, shortId, useMutation, useResource } from "./client";
 import {
@@ -35,7 +36,7 @@ export function Environments({ caps }: { caps: Capabilities }) {
   );
   const [create, setCreate] = useState(false);
   const [name, setName] = useState("");
-  const [type, setType] = useState<"managed" | "none">("managed");
+  const [type, setType] = useState<Environment["type"]>("managed");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<Environment>();
@@ -117,7 +118,7 @@ export function Environments({ caps }: { caps: Capabilities }) {
           >
             <div className="card-top">
               <span className="environment-icon">
-                {environment.type === "managed" ? (
+                {environment.type === "desktop" ? <Monitor size={23} /> : environment.type === "managed" ? (
                   <Terminal size={23} />
                 ) : (
                   <FileText size={23} />
@@ -127,12 +128,12 @@ export function Environments({ caps }: { caps: Capabilities }) {
             </div>
             <h3>{environment.name}</h3>
             <p>
-              {environment.type === "managed"
+              {environment.type === "desktop" ? "Linux desktop · HCU" : environment.type === "managed"
                 ? "Managed sandbox"
                 : "Conversation only"}
             </p>
             <div className="environment-specs">
-              {environment.type === "managed" ? (
+              {environment.type === "desktop" ? (<><span><Monitor size={14} />Ubuntu / Xfce</span><span><HardDrive size={14} />Persistent VM</span><span><GlobeLock size={14} />No network</span></>) : environment.type === "managed" ? (
                 <>
                   <span>
                     <Cpu size={14} />1 CPU
@@ -192,6 +193,10 @@ export function Environments({ caps }: { caps: Capabilities }) {
               />
             </label>
             <div className="choice-grid">
+              <label className={`choice ${type === "desktop" ? "selected" : ""} ${!caps.desktop.configured ? "disabled" : ""}`}>
+                <input name="environment-type" type="radio" checked={type === "desktop"} disabled={!caps.desktop.configured} onChange={() => setType("desktop")} />
+                <Monitor size={22} /><strong>Linux desktop</strong><small>{caps.desktop.configured ? "Ubuntu, Xfce, and HCU in a private VM. Apps and files stay with the session." : "Set up a desktop host to enable Linux VMs."}</small>
+              </label>
               <label
                 className={`choice ${type === "managed" ? "selected" : ""}`}
               >
@@ -223,6 +228,7 @@ export function Environments({ caps }: { caps: Capabilities }) {
                 </small>
               </label>
             </div>
+            {type === "desktop" && <p className="field-hint">Uses QEMU/KVM with HCU for accessibility and screen control. <DocLink page="desktop">Desktop setup guide</DocLink></p>}
             {type === "managed" && (
               <p className="field-hint">
                 Operator image: <code>{caps.sandbox_image}</code>
@@ -252,7 +258,7 @@ export function Environments({ caps }: { caps: Capabilities }) {
         <Modal
           title={detail.name}
           subtitle={
-            detail.type === "managed"
+            detail.type === "desktop" ? "Linux desktop template" : detail.type === "managed"
               ? "Managed sandbox template"
               : "Conversation-only template"
           }
@@ -265,7 +271,7 @@ export function Environments({ caps }: { caps: Capabilities }) {
           <JsonBlock
             value={{
               type: detail.type,
-              ...(detail.type === "managed"
+              ...(detail.type === "desktop" ? { platform: "linux", hypervisor: "qemu-kvm", driver: "hcu", network: "none", workspace: "/workspace", lifecycle: "paused between runs" } : detail.type === "managed"
                 ? {
                     image: detail.image,
                     network: "none",
@@ -354,7 +360,7 @@ export function Connections({ caps }: { caps: Capabilities }) {
           <div className="runtime-meta">
             <span>SDK {caps.sdk_version}</span>
             <span>PostgreSQL persistence</span>
-            <span>Docker execution</span>
+            <span>Docker & Linux desktops</span>
           </div>
           <DocLink page="concepts">
             Understand agents and sessions

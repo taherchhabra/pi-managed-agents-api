@@ -10,7 +10,7 @@ const token = () => 'pi_' + randomBytes(32).toString('base64url');
 const tenantPattern = /^[a-z][a-z0-9_-]{0,62}$/;
 const composeKeys = ['COMPOSE_PROJECT_NAME', 'AGENTS_DOMAIN', 'ACME_EMAIL', 'POSTGRES_PASSWORD', 'API_KEYS',
   'DOCKER_GID', 'SANDBOX_IMAGE', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENROUTER_API_KEY',
-  'RATE_LIMIT_MAX', 'LOGIN_RATE_LIMIT_MAX', 'API_IMAGE', 'WORKER_IMAGE', 'HTTP_BIND', 'HTTPS_BIND'];
+  'RATE_LIMIT_MAX', 'LOGIN_RATE_LIMIT_MAX', 'API_IMAGE', 'WORKER_IMAGE', 'HTTP_BIND', 'HTTPS_BIND', 'DESKTOP_HOST_URL', 'DESKTOP_HOST_TOKEN'];
 
 // Explicit --env-file is authoritative, even when the operator's shell contains
 // credentials from a different local development stack.

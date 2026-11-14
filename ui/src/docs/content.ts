@@ -1,3 +1,4 @@
+import desktopGuide from '../../../docs/desktop.md?raw';
 export interface DocSection { id: string; title: string; body: string }
 export interface DocPage { id: string; title: string; group: string; description: string; minutes: string; sections: DocSection[] }
 
@@ -37,7 +38,7 @@ export const docPages: DocPage[] = [
       {
         "id": "inspect-the-result",
         "title": "4. Inspect the result",
-        "body": "The **Inspector** sits beside the conversation on desktop and below it on a narrow screen. Use its three tabs:\n\n- **Runs:** expand the run, then a tool call, to see its arguments, result, and duration. The **tool calls** button below an assistant name takes you to that run.\n- **Event log:** choose a run, search event names or payloads, and select **Tools** or **Errors** to narrow the list. Select an event to inspect or copy its JSON.\n- **Artifacts:** preview or download `fibonacci.py` and `fibonacci.txt`. These are saved snapshots published from `outputs/` after a successful run.\n\nSelect **Export logs** at the top of the session to download its saved history. If the run fails or needs attention, use [Runs & logs](#/docs/runs-and-logs?section=troubleshoot) to find the next step."
+        "body": "The **Inspector** sits beside the conversation on desktop and below it on a narrow screen. Use its tabs:\n\n- **Runs:** expand the run, then a tool call, to see its arguments, result, and duration. The **tool calls** button below an assistant name takes you to that run.\n- **Event log:** choose a run, search event names or payloads, and select **Tools** or **Errors** to narrow the list. Select an event to inspect or copy its JSON.\n- **Artifacts:** preview or download `fibonacci.py` and `fibonacci.txt`. These are saved snapshots published from `outputs/` after a successful run.\n\nSelect **Export logs** at the top of the session to download its saved history. If the run fails or needs attention, use [Runs & logs](#/docs/runs-and-logs?section=troubleshoot) to find the next step."
       },
       {
         "id": "keep-building",
@@ -76,7 +77,7 @@ export const docPages: DocPage[] = [
       {
         "id": "useful-endpoints",
         "title": "Endpoints you will use",
-        "body": "- `POST /v1/agents` — create a definition; use the response's `latest_version.id` for a session.\n- `POST /v1/environment-templates` — create a `managed` or `none` environment.\n- `POST /v1/sessions` — bind an `agent_version_id` to an `environment_template_id`.\n- `POST /v1/sessions/:session/runs` — send a task.\n- `GET /v1/sessions/:session/events?stream=true` — follow saved events using SSE.\n- `GET /v1/sessions/:session/artifacts` — list outputs and their `download_url` values. Downloads require the same bearer authentication.\n- `POST /v1/sessions/:session/runs/:run/cancel` — request cancellation with an empty JSON body `{}`.\n\nErrors use `{ \"error\": { \"code\": \"...\", \"message\": \"...\" } }`. Typical status codes are `400` for an invalid request, `401` for authentication, `404` for an unavailable resource, and `409` for a lifecycle or idempotency conflict."
+        "body": "- `POST /v1/agents` — create a definition; use the response's `latest_version.id` for a session.\n- `POST /v1/environment-templates` — create a `managed`, `desktop`, or `none` environment.\n- `POST /v1/sessions` — bind an `agent_version_id` to an `environment_template_id`.\n- `POST /v1/sessions/:session/runs` — send a task.\n- `GET /v1/sessions/:session/events?stream=true` — follow saved events using SSE.\n- `GET /v1/sessions/:session/artifacts` — list outputs and their `download_url` values. Downloads require the same bearer authentication.\n- `POST /v1/sessions/:session/runs/:run/cancel` — request cancellation with an empty JSON body `{}`.\n\nErrors use `{ \"error\": { \"code\": \"...\", \"message\": \"...\" } }`. Typical status codes are `400` for an invalid request, `401` for authentication, `404` for an unavailable resource, and `409` for a lifecycle or idempotency conflict."
       }
     ]
   },
@@ -134,12 +135,12 @@ export const docPages: DocPage[] = [
       {
         "id": "environments",
         "title": "Environments",
-        "body": "An **environment template** chooses how work runs. **Managed sandbox** gives a session Bash, Python, and a filesystem when those tools are enabled on the agent. **Conversation only** keeps model context without tool execution and requires an empty tools list.\n\nCreate templates in [Environments](#/environments), or let **Test agent** create one when you choose a workspace type."
+        "body": "An **environment template** chooses how work runs. **Managed sandbox** gives a session Bash, Python, and a filesystem when those tools are enabled on the agent. **Linux desktop** provides persistent Ubuntu/Xfce applications with HCU accessibility and screen control; see [Linux desktops & HCU](#/docs/desktop) for setup. **Conversation only** keeps model context without tool execution and requires an empty tools list.\n\nCreate templates in [Environments](#/environments), or let **Test agent** create one when you choose a workspace type."
       },
       {
         "id": "sessions",
         "title": "Sessions",
-        "body": "A **session** connects one agent version with one environment template. It owns the conversation, run history, and, for a managed environment, a persistent workspace.\n\nUse the same session for related tasks. Use a new session for a fresh conversation and separate files. Changing an agent later does not change an existing session."
+        "body": "A **session** connects one agent version with one environment template. It owns the conversation, run history, and, for a Docker or desktop environment, a persistent workspace.\n\nUse the same session for related tasks. Use a new session for a fresh conversation and separate files. Changing an agent later does not change an existing session."
       },
       {
         "id": "runs",
@@ -163,7 +164,7 @@ export const docPages: DocPage[] = [
       {
         "id": "available-tools",
         "title": "Choose the tools it needs",
-        "body": "Enable tools in the agent definition before starting a managed session:\n\n- **Run commands** (`bash`) executes Bash and Python commands. Each command has a 30-second limit; returned output is capped at 64 KiB.\n- **Read files** (`read_file`) reads a UTF-8 file inside `/workspace`, up to 64 KiB.\n- **Write files** (`write_file`) creates or updates a UTF-8 file inside `/workspace`, up to 64 KiB.\n\nTools execute sequentially. Ordinary command or file errors are returned to the agent so it can correct them."
+        "body": "Enable tools in the agent definition before starting a session:\n\n- **Run commands** (`bash`) executes Bash and Python commands. Each command has a 30-second limit; returned output is capped at 64 KiB.\n- **Read files** (`read_file`) reads a UTF-8 file inside `/workspace`, up to 64 KiB.\n- **Write files** (`write_file`) creates or updates a UTF-8 file inside `/workspace`, up to 64 KiB.\n\n**Accessibility · HCU** (`AX`) inspects and operates named controls. **Screen & input · HCU** (`GUI`) provides screenshots, mouse input, typing and zoom. Both require a Linux desktop environment and a model with vision; follow the [desktop guide](#/docs/desktop).\n\nTools execute sequentially. Ordinary command or file errors are returned to the agent so it can correct them."
       },
       {
         "id": "sandbox",
@@ -192,7 +193,7 @@ export const docPages: DocPage[] = [
       {
         "id": "inspect",
         "title": "Read the session inspector",
-        "body": "Open a session from [Sessions](#/sessions). **Playground** shows your messages and completed assistant responses. **Inspector** appears beside it on desktop and below it on a narrow screen.\n\n- **Runs** groups the steps for each task. Expand a run to see its attempt, duration, reported cost, and saved steps. Expand a tool call for its arguments and result. The **tool calls** button in the conversation opens the matching run.\n- **Event log** lists sequence numbers, event names, and timestamps. Use **Filter inspector by run**, **Search events**, and the **All events / Tools / Errors** selector to focus on the work you need. Select a row to inspect the payload, copy it, or expand **Full event JSON**.\n- **Artifacts** lists files published from successful runs. **Preview** is available for supported text files up to 256 KiB; **Download** saves any published file. Later changes to workspace files do not alter an existing artifact.\n\nThe summary above the Playground shows the pinned model, environment, run count, tool calls, and reported tokens. Usage comes from Pi; interrupted attempts may have incomplete usage.\n\nUse **Export logs** to download the session history, including runs and events beyond the currently visible list."
+        "body": "Open a session from [Sessions](#/sessions). **Playground** shows your messages and completed assistant responses. **Inspector** appears beside it on desktop and below it on a narrow screen.\n\n- **Runs** groups the steps for each task. Expand a run to see its attempt, duration, reported cost, and saved steps. Expand a tool call for its arguments and result. The **tool calls** button in the conversation opens the matching run.\n- **Event log** lists sequence numbers, event names, and timestamps. Use **Filter inspector by run**, **Search events**, and the **All events / Tools / Errors** selector to focus on the work you need. Select a row to inspect the payload, copy it, or expand **Full event JSON**.\n- **Artifacts** lists files published from successful runs. **Preview** is available for supported text files up to 256 KiB; **Download** saves any published file. Later changes to workspace files do not alter an existing artifact.\n\nThe summary above the Playground shows the pinned model, environment, run count, tool calls, and reported tokens. Usage comes from Pi; interrupted attempts may have incomplete usage.\n\nDesktop sessions also have a **Desktop** tab with a read-only preview and the screenshots the model received. AX/GUI tool results and their saved images appear in Runs and Event log.\n\nUse **Export logs** to download the session history, including runs and events beyond the currently visible list."
       },
       {
         "id": "statuses",
@@ -298,5 +299,17 @@ export const docPages: DocPage[] = [
         "body": "From a machine with Docker and Node.js, run:\n\n```sh\nnpm run test:deployment\n```\n\nThis builds an isolated stack, binds its host ports only to loopback, and connects from a separate application container over HTTPS with a trusted test CA. It checks authentication, workspace isolation, secure console cookies, idempotency, SSE delivery, Docker tools, artifact permissions, and persistence after service restarts. No model key is required and no model response is simulated by this deployment test.\n\nFor the complete model path, set `OPENROUTER_API_KEY` in your ignored local `.env` file and run:\n\n```sh\nnpm run test:deployment:live\n```\n\nThis opt-in test uses provider credits. It executes a real model through Pi, downloads a generated artifact, restarts the stack, and verifies a follow-up in the same conversation and workspace. Both modes remove their test services and volumes and keep a sanitized report under `.data/deployment-tests/`. They do not deploy to a public VPS or validate public DNS/certificate issuance."
       }
     ]
-  }
+  },
+  {
+    id: 'desktop', title: 'Linux desktops & HCU', group: 'Run it yourself',
+    description: 'Give your agent a private Linux desktop with accessibility, screenshots, and persistent apps.', minutes: '12 min',
+    sections: desktopGuide.split(/^## /m).map((part, index) => {
+      const [heading, ...lines] = part.split('\n');
+      return { id: index ? heading!.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-$/, '') : 'overview',
+        title: index ? heading! : 'A desktop for each session',
+        body: lines.join('\n').replace(/```mermaid[\s\S]*?```/, 'The console and your application use the Agents API. The Pi worker calls the model and sends desktop operations to the desktop host. The host manages an isolated QEMU/KVM VM; HCU operates the applications inside it.')
+          .split('\n').map(line => line.startsWith('|') ? (line.includes('---') || line.includes('Endpoint') ? '' : '- ' + line.split('|').slice(1, -1).map(value => value.trim()).join(' — ')) : line).join('\n') };
+    }),
+  },
+
 ];

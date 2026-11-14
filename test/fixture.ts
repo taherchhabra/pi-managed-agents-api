@@ -10,12 +10,13 @@ import { ArtifactStore } from '../src/artifacts.js';
 import { piRuntime, type PiOptions } from '../src/runtime.js';
 import { DockerSandboxProvider } from '../src/sandbox.js';
 import { Store } from '../src/store.js';
+import type { DesktopClient } from '../src/desktop/client.js';
 
 export const tokenA = 'tenant-a-test-token-with-32-characters';
 export const tokenB = 'tenant-b-test-token-with-32-characters';
 export const agentConfig = { provider: 'openai', model: 'gpt-4.1-mini', instructions: 'Follow the requested task.', tools: [] };
 
-export async function fixture() {
+export async function fixture(options: { desktop?: DesktopClient } = {}) {
   const database = process.env.TEST_DATABASE_URL ?? 'postgres://pi:pi@127.0.0.1:55432/pi_agents';
   const schema = 'test_' + randomUUID().replaceAll('-', '');
   const admin = new pg.Pool({ connectionString: database, connectionTimeoutMillis: 5000 });
@@ -27,7 +28,7 @@ export async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'pi-api-test-'));
   const artifacts = new ArtifactStore(directory);
   const sandboxes = new DockerSandboxProvider();
-  const app = buildApi(store, artifacts, { apiKeys: { [tokenA]: 'tenant-a', [tokenB]: 'tenant-b' }, sandboxImage: process.env.SANDBOX_IMAGE ?? 'pi-managed-sandbox:dev' });
+  const app = buildApi(store, artifacts, { ...options, apiKeys: { [tokenA]: 'tenant-a', [tokenB]: 'tenant-b' }, sandboxImage: process.env.SANDBOX_IMAGE ?? 'pi-managed-sandbox:dev' });
   await app.ready();
   const request = async (method: 'POST' | 'GET', url: string, body?: unknown, key: string = randomUUID(), token = tokenA) => {
     return app.inject({ method, url, headers: { authorization: 'Bearer ' + token, 'idempotency-key': key },
@@ -57,7 +58,7 @@ export async function fixture() {
 
 // A real HTTP/SSE provider fixture: Pi still parses the model stream, validates
 // tool arguments, invokes tools, updates SessionManager and settles its loop.
-export async function modelFixture(options: Pick<PiOptions, 'maxTurns' | 'maxOutputTokens' | 'beforeModelRequest'> = {}) {
+export async function modelFixture(options: Pick<PiOptions, 'maxTurns' | 'maxOutputTokens' | 'beforeModelRequest'> & { vision?: boolean } = {}) {
   const requests: any[] = [];
   const server = createServer(async (request, response) => {
     try {
@@ -79,7 +80,10 @@ export async function modelFixture(options: Pick<PiOptions, 'maxTurns' | 'maxOut
       const toolResults = messages.slice(lastUser + 1).filter(message => message.role === 'tool');
       let delta: any = { role: 'assistant', content: 'Done.' };
       let finish = 'stop';
-      if (prompt.includes('make a greeting')) {
+      if (prompt.includes('inspect the desktop') && !toolResults.length) {
+        delta = { role: 'assistant', tool_calls: [{ index: 0, id: 'desktop_screenshot', type: 'function', function: { name: 'GUI', arguments: JSON.stringify({ actions: [{ type: 'screenshot' }] }) } }] };
+        finish = 'tool_calls';
+      } else if (prompt.includes('make a greeting')) {
         const steps = [
           { name: 'write_file', arguments: { path: 'outputs/greeting.txt', content: 'Hello from the Pi SDK!\n' } },
           { name: 'read_file', arguments: { path: 'outputs/greeting.txt' } },
@@ -120,7 +124,7 @@ export async function modelFixture(options: Pick<PiOptions, 'maxTurns' | 'maxOut
   if (!address || typeof address === 'string') throw new Error('No fixture port');
   const runtime = piRuntime({ ...options, keys: { openai: 'fixture-only-key' }, configureModelRuntime: async modelRuntime => {
     modelRuntime.registerProvider('openai', { api: 'openai-completions', baseUrl: `http://127.0.0.1:${address.port}/v1`, apiKey: 'fixture-only-key',
-      models: [{ id: 'gpt-4.1-mini', name: 'Test model', api: 'openai-completions', reasoning: false, input: ['text'],
+      models: [{ id: 'gpt-4.1-mini', name: 'Test model', api: 'openai-completions', reasoning: false, input: options.vision ? ['text', 'image'] : ['text'],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100_000, maxTokens: 1024 }] });
   } });
   return { runtime, requests, async close() { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } };

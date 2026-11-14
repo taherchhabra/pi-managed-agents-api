@@ -1,5 +1,5 @@
 export type Provider = "openrouter" | "openai" | "anthropic";
-export type Tool = "bash" | "read_file" | "write_file";
+export type Tool = "bash" | "read_file" | "write_file" | "AX" | "GUI";
 export interface AgentConfig {
   provider: Provider;
   model: string;
@@ -23,7 +23,7 @@ export interface Agent {
 export interface Environment {
   id: string;
   name: string;
-  type: "none" | "managed";
+  type: "none" | "managed" | "desktop";
   image: string | null;
   created_at: string;
 }
@@ -57,7 +57,7 @@ export interface Session {
   agent_version: number;
   environment_template_id: string;
   environment_name: string;
-  environment_type: "managed" | "none";
+  environment_type: "managed" | "none" | "desktop";
   created_at: string;
   event_seq: string;
   config: AgentConfig;
@@ -89,8 +89,9 @@ export interface Capabilities {
   providers: {
     id: Provider;
     configured: boolean;
-    models: { id: string; name: string; context_window: number }[];
+    models: { id: string; name: string; context_window: number; input: string[] }[];
   }[];
   sandbox_image: string;
   sdk_version: string;
+  desktop: { configured: boolean; platform: string; network: string };
 }

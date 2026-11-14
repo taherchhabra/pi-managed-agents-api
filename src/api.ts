@@ -9,6 +9,7 @@ import { ApiError, type AgentConfig } from './domain.js';
 import { Store } from './store.js';
 import { installConsole } from './console.js';
 import { modelCatalog } from './catalog.js';
+import type { DesktopClient } from './desktop/client.js';
 
 declare module 'fastify' { interface FastifyRequest { tenant: string } }
 const object = (properties: Record<string, any>) => Type.Object(properties, { additionalProperties: false });
@@ -16,13 +17,13 @@ const name = Type.String({ minLength: 1, maxLength: 200 });
 const id = Type.String({ pattern: '^[a-z]+_[0-9a-f-]{36}$', maxLength: 50 });
 const config = object({ provider: Type.Union([Type.Literal('openai'), Type.Literal('anthropic'), Type.Literal('openrouter')]),
   model: Type.String({ minLength: 1, maxLength: 200 }), instructions: Type.String({ maxLength: 32_768 }),
-  tools: Type.Array(Type.Union([Type.Literal('bash'), Type.Literal('read_file'), Type.Literal('write_file')]), { uniqueItems: true, maxItems: 3 }) });
+  tools: Type.Array(Type.Union([Type.Literal('bash'), Type.Literal('read_file'), Type.Literal('write_file'), Type.Literal('AX'), Type.Literal('GUI')]), { uniqueItems: true, maxItems: 5 }) });
 const sessionParams = object({ session: id });
 const runParams = object({ session: id, run: id });
 const cursor = Type.String({ pattern: '^(0|[1-9][0-9]{0,18})$', maxLength: 19 });
 const params = (request: FastifyRequest) => request.params as Record<string, string>;
 
-export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<Config, 'apiKeys' | 'sandboxImage'> & Partial<Pick<Config, 'providerKeys' | 'providerConfigured' | 'consoleOrigin' | 'trustProxyHops' | 'rateLimitMax' | 'loginRateLimitMax'>>, logger = false) {
+export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<Config, 'apiKeys' | 'sandboxImage'> & Partial<Pick<Config, 'providerKeys' | 'providerConfigured' | 'consoleOrigin' | 'trustProxyHops' | 'rateLimitMax' | 'loginRateLimitMax'>> & { desktop?: DesktopClient }, logger = false) {
   const app = Fastify({ logger: logger ? { level: 'info', redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers.set-cookie'] } : false,
     logController: new LogController({ disableRequestLogging: true }), bodyLimit: 256 * 1024,
     trustProxy: options.trustProxyHops ? (_address, hop) => hop < options.trustProxyHops! : false,
@@ -47,10 +48,16 @@ export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<C
     app.addHook('preClose', async () => { for (const controller of streams) controller.abort(); });
     app.get('/healthz', { config: { rateLimit: false } }, async () => { await store.pool.query('SELECT 1'); return { status: 'ok' }; });
     let catalog: ReturnType<typeof modelCatalog> | undefined;
+    const validateDesktopModel = async (config: AgentConfig) => {
+      if (!config.tools.some(tool => tool === 'AX' || tool === 'GUI')) return;
+      catalog ??= modelCatalog().catch(error => { catalog = undefined; throw error; });
+      const model = (await catalog).find(provider => provider.id === config.provider)?.models.find(model => model.id === config.model);
+      if (!model?.input.includes('image')) throw new ApiError(400, 'vision_model_required', 'HCU desktop tools require a model with image input support');
+    };
     app.get('/v1/capabilities', async () => {
       catalog ??= modelCatalog().catch(error => { catalog = undefined; throw error; });
       return { providers: (await catalog).map(provider => ({ ...provider, configured: options.providerConfigured?.[provider.id] ?? !!options.providerKeys?.[provider.id] })),
-        sandbox_image: options.sandboxImage, runtime: 'Pi coding agent SDK', sdk_version: '1.5.2' };
+        sandbox_image: options.sandboxImage, desktop: { configured: !!options.desktop, platform: 'linux', network: 'none' }, runtime: 'Pi coding agent SDK', sdk_version: '1.5.2' };
     });
 
     const mutation = async (request: FastifyRequest, fn: Parameters<Store['mutate']>[4]) => {
@@ -62,19 +69,22 @@ export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<C
 
     app.post('/v1/agents', { schema: { body: object({ name, config }) } }, async (request, reply) => {
       const body = request.body as { name: string; config: AgentConfig };
+      await validateDesktopModel(body.config);
       const result = await mutation(request, tx => store.createAgent(tx, request.tenant, body.name, body.config));
       return reply.code(result.status).send(result.body);
     });
     app.get('/v1/agents', async request => ({ data: await store.list(request.tenant, 'agents') }));
     app.get('/v1/agents/:agent', { schema: { params: object({ agent: id }) } }, request => store.getAgent(request.tenant, params(request).agent!));
     app.post('/v1/agents/:agent/versions', { schema: { params: object({ agent: id }), body: config } }, async (request, reply) => {
+      await validateDesktopModel(request.body as AgentConfig);
       const result = await mutation(request, tx => store.createVersion(tx, request.tenant, params(request).agent!, request.body as AgentConfig));
       return reply.code(result.status).send(result.body);
     });
     app.get('/v1/environment-templates', async request => ({ data: await store.list(request.tenant, 'environment_templates') }));
     app.get('/v1/environment-templates/:environment', { schema: { params: object({ environment: id }) } }, request => store.getEnvironment(request.tenant, params(request).environment!));
-    app.post('/v1/environment-templates', { schema: { body: object({ name, type: Type.Union([Type.Literal('none'), Type.Literal('managed')]) }) } }, async (request, reply) => {
+    app.post('/v1/environment-templates', { schema: { body: object({ name, type: Type.Union([Type.Literal('none'), Type.Literal('managed'), Type.Literal('desktop')]) }) } }, async (request, reply) => {
       const body = request.body as { name: string; type: string };
+      if (body.type === 'desktop' && !options.desktop) throw new ApiError(503, 'desktop_unavailable', 'Configure a desktop host before creating a Linux desktop environment');
       const result = await mutation(request, tx => store.createEnvironment(tx, request.tenant, body.name, body.type, options.sandboxImage));
       return reply.code(result.status).send(result.body);
     });
@@ -85,6 +95,23 @@ export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<C
       return reply.code(result.status).send(result.body);
     });
     app.get('/v1/sessions/:session', { schema: { params: sessionParams } }, request => store.getSession(request.tenant, params(request).session!));
+    const desktopSession = async (request: FastifyRequest) => {
+      const session = await store.getSession(request.tenant, params(request).session!);
+      if (session.environment_type !== 'desktop') throw new ApiError(404, 'not_found', 'This session has no desktop');
+      if (session.status === 'archived') throw new ApiError(410, 'desktop_archived', 'This desktop has been archived. Saved screenshots remain available in the event log.');
+      if (!options.desktop) throw new ApiError(503, 'desktop_unavailable', 'Desktop host is not configured');
+      return options.desktop;
+    };
+    app.get('/v1/sessions/:session/desktop', { schema: { params: sessionParams } }, async request =>
+      (await desktopSession(request)).status(params(request).session!, request.tenant));
+    app.get('/v1/sessions/:session/desktop/frame', { schema: { params: sessionParams } }, async (request, reply) => {
+      const bytes = await (await desktopSession(request)).frame(params(request).session!, request.tenant);
+      return reply.type('image/jpeg').header('Cache-Control', 'no-store').send(bytes);
+    });
+    app.get('/v1/sessions/:session/screenshots/:screenshot', { schema: { params: object({ session: id, screenshot: id }) } }, async (request, reply) => {
+      const capture = await store.screenshot(request.tenant, params(request).session!, params(request).screenshot!);
+      return reply.type('image/jpeg').header('Cache-Control', 'no-store').send(await artifacts.read(capture.sha256));
+    });
     app.get('/v1/sessions/:session/runs', { schema: { params: sessionParams, querystring: object({ after: Type.Optional(id) }) } }, async request => {
       const data = await store.runs(request.tenant, params(request).session!, (request.query as { after?: string }).after);
       return { data, next_cursor: data.length === 100 ? data.at(-1)!.id : null };

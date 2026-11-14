@@ -1,3 +1,4 @@
+import { DesktopPanel, ScreenshotEvidence } from "./Desktop";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Markdown from "react-markdown";
 import {
@@ -380,6 +381,7 @@ function useSession(id: string) {
 export function SessionWorkspace({ id }: { id: string }) {
   const { data, events, error, connection, refresh } = useSession(id);
   const [tab, setTab] = useState("runs");
+  useEffect(() => { setTab(data?.session.environment_type === "desktop" ? "desktop" : "runs"); }, [data?.session.id]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -623,7 +625,7 @@ export function SessionWorkspace({ id }: { id: string }) {
         error={actionError || error}
         retry={error ? refresh : undefined}
       />
-      <div className="playground">
+      <div className={`playground ${session.environment_type === "desktop" ? "desktop-playground" : ""}`}>
         <section className="conversation-panel" aria-label="Conversation">
           <div className="pane-heading">
             <h2>
@@ -631,7 +633,7 @@ export function SessionWorkspace({ id }: { id: string }) {
               Playground
             </h2>
             <span className="subtle">
-              {session.environment_type === "managed"
+              {session.environment_type === "desktop" ? "Persistent Linux desktop" : session.environment_type === "managed"
                 ? "Persistent workspace"
                 : "Conversation only"}
             </span>
@@ -661,7 +663,7 @@ export function SessionWorkspace({ id }: { id: string }) {
                   Watch its work unfold in the inspector.
                 </p>
                 <div className="prompt-suggestions">
-                  {(session.config.tools.length
+                  {(session.environment_type === "desktop" ? ["Take a screenshot, list the open applications, and describe what you see.", "Open the text editor, type a short welcome note, and save it as /workspace/outputs/welcome.txt. Verify the result on screen."] : session.config.tools.length
                     ? [
                         "Create a short welcome note in outputs/welcome.txt and verify its contents.",
                         "Use Python to calculate the first 10 Fibonacci numbers.",
@@ -912,6 +914,7 @@ export function SessionWorkspace({ id }: { id: string }) {
           </div>
           <div className="inspector-tabs">
             {[
+              ...(session.environment_type === "desktop" ? [["desktop", "Desktop", ""]] : []),
               ["runs", "Runs", runs.length],
               ["events", "Event log", events.length],
               ["artifacts", "Artifacts", artifacts.length],
@@ -926,7 +929,7 @@ export function SessionWorkspace({ id }: { id: string }) {
               </button>
             ))}
           </div>
-          {tab !== "artifacts" && (
+          {tab !== "artifacts" && tab !== "desktop" && (
             <div className="inspector-toolbar">
               <ListFilter size={14} />
               <select
@@ -949,6 +952,7 @@ export function SessionWorkspace({ id }: { id: string }) {
             </div>
           )}
           <div className="inspector-body">
+            {tab === "desktop" && <DesktopPanel session={session} events={events} />}
             {tab === "runs" && (
               <>
                 {visibleRuns.length === 0 ? (
@@ -1055,6 +1059,7 @@ export function SessionWorkspace({ id }: { id: string }) {
             <code>{event.id}</code>
             <CopyButton value={event.id} />
           </div>
+          <ScreenshotEvidence event={event} />
           <JsonBlock value={event.data} label="Event payload" />
           <details className="config-details">
             <summary>Full event JSON</summary>
@@ -1227,6 +1232,7 @@ function RunTrace({
                       <pre className={result.data.isError ? "error-text" : ""}>
                         {result.data.text}
                       </pre>
+                      <ScreenshotEvidence event={result} />
                     </>
                   )}
                   <button

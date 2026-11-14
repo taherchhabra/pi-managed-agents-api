@@ -6,6 +6,7 @@ COPY tsconfig.json ./
 COPY src ./src
 COPY ui ./ui
 COPY examples ./examples
+COPY docs/desktop.md ./docs/desktop.md
 RUN npm run build
 RUN npm prune --omit=dev && npm cache clean --force
 

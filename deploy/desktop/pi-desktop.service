@@ -1,0 +1,28 @@
+[Unit]
+Description=Pi Agents HCU desktop host
+After=network.target
+
+[Service]
+Type=simple
+User=pi-desktop
+SupplementaryGroups=kvm
+WorkingDirectory=/opt/pi-managed-agents-api
+EnvironmentFile=/etc/pi-desktop.env
+ExecStart=/usr/bin/node /opt/pi-managed-agents-api/dist/src/desktop/main.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+RuntimeDirectory=pi-desktop
+RuntimeDirectoryPreserve=yes
+StateDirectory=pi-desktop
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# Keep QEMU processes and their RAM across desktop-host restarts. The host
+# fences HCU, pauses its VMs and reconnects via private Unix sockets on startup.
+KillMode=process
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

@@ -9,6 +9,9 @@ const runFields = 'id, session_id, status, input, attempt, output_text, error, u
 
 export class Store {
   constructor(public pool: pg.Pool) {}
+  async environmentType(session: string): Promise<string> {
+    return requireRow((await this.pool.query('SELECT e.type FROM sessions s JOIN environment_templates e ON e.id=s.environment_template_id WHERE s.id=$1', [session])).rows[0]).type;
+  }
   async transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     const tx = await this.pool.connect();
     try { await tx.query('BEGIN'); const value = await fn(tx); await tx.query('COMMIT'); return value; }
@@ -22,6 +25,19 @@ export class Store {
       if (!(await tx.query('SELECT 1 FROM schema_migrations WHERE version=1')).rowCount) {
         await tx.query(schema);
         await tx.query('INSERT INTO schema_migrations VALUES(1)');
+      }
+      if (!(await tx.query('SELECT 1 FROM schema_migrations WHERE version=2')).rowCount) {
+        await tx.query(`ALTER TABLE environment_templates DROP CONSTRAINT environment_templates_type_check;
+          ALTER TABLE environment_templates ADD CONSTRAINT environment_templates_type_check CHECK(type IN ('none','managed','desktop'));
+          CREATE TABLE screenshots (
+            id text PRIMARY KEY, tenant_id text NOT NULL, session_id text NOT NULL, run_id text NOT NULL,
+            call_id text NOT NULL, sha256 text NOT NULL, size integer NOT NULL, width integer NOT NULL, height integer NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            FOREIGN KEY(session_id,tenant_id) REFERENCES sessions(id,tenant_id),
+            FOREIGN KEY(run_id,tenant_id) REFERENCES runs(id,tenant_id)
+          );
+          CREATE INDEX screenshots_session ON screenshots(session_id,tenant_id);
+          INSERT INTO schema_migrations VALUES(2)`);
       }
     });
   }
@@ -70,6 +86,7 @@ export class Store {
     const agent = requireRow((await tx.query('SELECT config FROM agent_versions WHERE id=$1 AND tenant_id=$2', [version, tenant])).rows[0]);
     const env = requireRow((await tx.query('SELECT type FROM environment_templates WHERE id=$1 AND tenant_id=$2', [environment, tenant])).rows[0]);
     if (env.type === 'none' && agent.config.tools.length) throw new ApiError(400, 'environment_required', 'Filesystem and shell tools require a managed environment');
+    if (agent.config.tools.some((tool: string) => tool === 'AX' || tool === 'GUI') && env.type !== 'desktop') throw new ApiError(400, 'desktop_required', 'Desktop tools require a Linux desktop environment');
     const id = makeId('ses');
     const row = (await tx.query('INSERT INTO sessions(id,tenant_id,agent_version_id,environment_template_id) VALUES($1,$2,$3,$4) RETURNING id,status,agent_version_id,environment_template_id,created_at',
       [id, tenant, version, environment])).rows[0];
@@ -228,12 +245,19 @@ export class Store {
       await this.event(tx, job.tenant_id, job.session_id, 'tool.requested', job.id, { call_id: call, name, args });
     });
   }
-  async endTool(job: Job, call: string, result: ToolResult) {
+  async endTool(job: Job, call: string, result: ToolResult, images: { id: string; sha256: string; size: number; width: number; height: number }[] = []) {
     await this.transaction(async tx => {
       await this.owned(tx, job);
-      await tx.query("UPDATE tool_calls SET status='completed',result=$4,ended_at=now() WHERE run_id=$1 AND attempt=$2 AND call_id=$3", [job.id, job.attempt, call, JSON.stringify(result)]);
-      await this.event(tx, job.tenant_id, job.session_id, 'tool.completed', job.id, { call_id: call, ...result });
+      for (const image of images) await tx.query('INSERT INTO screenshots(id,tenant_id,session_id,run_id,call_id,sha256,size,width,height) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+        [image.id,job.tenant_id,job.session_id,job.id,call,image.sha256,image.size,image.width,image.height]);
+      const persisted = { text: result.text, ...(result.isError !== undefined ? { isError: result.isError } : {}), ...(images.length ? { images: images.map(image => ({ id: image.id, width: image.width, height: image.height,
+        url: `/v1/sessions/${job.session_id}/screenshots/${image.id}` })) } : {}) };
+      await tx.query("UPDATE tool_calls SET status='completed',result=$4,ended_at=now() WHERE run_id=$1 AND attempt=$2 AND call_id=$3", [job.id, job.attempt, call, JSON.stringify(persisted)]);
+      await this.event(tx, job.tenant_id, job.session_id, 'tool.completed', job.id, { call_id: call, ...persisted });
     });
+  }
+  async screenshot(tenant: string, session: string, id: string) {
+    return requireRow((await this.pool.query('SELECT sha256 FROM screenshots WHERE tenant_id=$1 AND session_id=$2 AND id=$3', [tenant, session, id])).rows[0]);
   }
   async finish(job: Job, status: 'completed' | 'failed' | 'cancelled', checkpoint: Checkpoint | null, output: string, error: unknown, usage: unknown, artifacts: { id: string; path: string; sha256: string; size: number }[] = []) {
     await this.transaction(async tx => {

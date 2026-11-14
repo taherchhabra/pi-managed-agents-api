@@ -11,6 +11,8 @@ import {
   Search,
   Terminal,
   WandSparkles,
+  Monitor,
+  MousePointer2,
 } from "lucide-react";
 import { date, navigate, shortId, useMutation, useResource } from "./client";
 import {
@@ -53,6 +55,8 @@ const toolInfo = [
     description: "Create files and publish outputs as artifacts.",
     icon: Code2,
   },
+  { id: "AX" as Tool, title: "Accessibility · HCU", description: "Find and operate named controls, windows, and menus.", icon: Monitor },
+  { id: "GUI" as Tool, title: "Screen & input · HCU", description: "See screenshots, click, type, scroll, and zoom.", icon: MousePointer2 },
 ];
 export const starterConfigs = [
   {
@@ -79,6 +83,9 @@ export const starterConfigs = [
       "Help the user write clearly. Ask for missing context when needed, and provide concise drafts and practical edits.",
     tools: [] as Tool[],
   },
+  { name: "Desktop assistant", description: "Use Linux apps with vision and accessibility.", icon: Monitor,
+    instructions: "You are a desktop assistant. Use HCU AX for named controls and GUI for screenshots and visual tasks. Inspect the desktop before acting, verify results, and save deliverables under /workspace/outputs.",
+    tools: ["AX", "GUI"] as Tool[] },
 ];
 export function Agents({ caps }: { caps: Capabilities }) {
   const { data, error, reload } = useResource<{ data: Agent[] }>("/v1/agents");
@@ -249,21 +256,22 @@ export function StartSession({
     version ??
     agent.latest_version;
   const [environment, setEnvironment] = useState("");
-  const [newType, setNewType] = useState<"managed" | "none">(
-    selected.config.tools.length ? "managed" : "none",
+  const needsDesktop = selected.config.tools.some(tool => tool === "AX" || tool === "GUI");
+  const [newType, setNewType] = useState<Environment["type"]>(
+    needsDesktop ? "desktop" : selected.config.tools.length ? "managed" : "none",
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const compatible =
     environments.data?.data.filter(
-      (item) => item.type === "managed" || selected.config.tools.length === 0,
+      (item) => needsDesktop ? item.type === "desktop" : item.type !== "none" || selected.config.tools.length === 0,
     ) ?? [];
   const configured = caps.providers.find(
     (provider) => provider.id === selected.config.provider,
   )?.configured;
   useEffect(() => {
     setEnvironment("");
-    setNewType(selected.config.tools.length ? "managed" : "none");
+    setNewType(needsDesktop ? "desktop" : selected.config.tools.length ? "managed" : "none");
   }, [versionId]);
   const start = async (event: FormEvent) => {
     event.preventDefault();
@@ -278,7 +286,7 @@ export function StartSession({
           (
             await mutate<Environment>("/v1/environment-templates", {
               name:
-                newType === "managed"
+                newType === "desktop" ? "Linux desktop" : newType === "managed"
                   ? "Managed workspace"
                   : "Conversation only",
               type: newType,
@@ -338,19 +346,24 @@ export function StartSession({
             {compatible.map((item) => (
               <option value={item.id} key={item.id}>
                 {item.name} ·{" "}
-                {item.type === "managed" ? "Managed sandbox" : "No sandbox"}
+                {item.type === "desktop" ? "Linux desktop" : item.type === "managed" ? "Managed sandbox" : "No sandbox"}
               </option>
             ))}
           </select>
         </label>
         {!environment && (
           <div className="choice-grid">
+            <label className={`choice ${newType === "desktop" ? "selected" : ""} ${!caps.desktop.configured ? "disabled" : ""}`}>
+              <input type="radio" name="workspace" checked={newType === "desktop"} disabled={!caps.desktop.configured} onChange={() => setNewType("desktop")} />
+              <Monitor size={21} /><strong>Linux desktop</strong><small>{caps.desktop.configured ? "A private VM with persistent apps, HCU, and a live preview." : "Configure a desktop host to enable this environment."}</small>
+            </label>
             <label
               className={`choice ${newType === "managed" ? "selected" : ""}`}
             >
               <input
                 type="radio"
                 name="workspace"
+                disabled={needsDesktop}
                 checked={newType === "managed"}
                 onChange={() => setNewType("managed")}
               />
@@ -397,7 +410,7 @@ export function StartSession({
           </button>
           <button
             className="button primary"
-            disabled={busy || !configured || !environments.data}
+            disabled={busy || !configured || !environments.data || (needsDesktop && !caps.desktop.configured)}
           >
             <Play size={15} />
             {busy ? "Starting…" : "Start session"}
@@ -430,7 +443,7 @@ export function AgentEditor({
     provider: defaultProvider,
     model:
       defaultProvider === "openrouter"
-        ? "openai/gpt-4.1-mini"
+        ? (preset?.name === "Desktop assistant" ? "deepseek/deepseek-v4.1-flash-1017" : "openai/gpt-4.1-mini")
         : defaultProvider === "openai"
           ? "gpt-4.1-mini"
           : "claude-sonnet-4-5",
@@ -629,7 +642,7 @@ export function AgentEditor({
             </div>
             <p className="field-hint">
               {validModel
-                ? `${models.find((model) => model.id === config.model)!.context_window.toLocaleString()} token context · Available in this Pi runtime`
+                ? `${models.find((model) => model.id === config.model)!.context_window.toLocaleString()} token context · ${models.find((model) => model.id === config.model)!.input.includes("image") ? "Vision supported" : "Text only"}`
                 : "Choose a model ID from the installed Pi catalog."}
             </p>
             <div className="field-divider" />
@@ -637,7 +650,7 @@ export function AgentEditor({
               Workspace tools <span className="subtle">Optional</span>
             </h3>
             <p className="field-hint">
-              Tools run in a managed sandbox with networking disabled.
+              Commands and files work in Docker or a desktop VM. HCU tools require a Linux desktop and a model with image input.
             </p>
             <div className="tool-options">
               {toolInfo.map((tool) => (

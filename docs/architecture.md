@@ -2,6 +2,8 @@
 
 Status: architecture target, 13 November 2026. An initial vertical slice is implemented and tested; see [the MVP contract](mvp.md) for its supported surface and recovery limits. The rest of this document includes planned capabilities.
 
+The optional Linux desktop implementation is described in [Linux desktops with HCU](desktop.md). It adds a separate QEMU/KVM host, session-scoped VMs, native HCU AX/GUI tools, image observations in Pi, and an authenticated console preview. It uses the existing run ownership and recovery protocol; Windows, macOS, RAM snapshots and desktop host scheduling remain future work.
+
 Build a session service around Pi, with the agent harness running separately from generated code. Use a native API inspired by the documented OpenAI and Claude contracts in [the provider comparison](provider-architecture.md). Keep provider compatibility behind later adapters so differences in events, approvals, and completion remain explicit.
 
 The initial scope is a hosted API with multiple tenants, one region, asynchronous work, and Linux sandboxes. The same components should be deployable by a single organization. Traffic targets, hosting provider, and retention periods remain product decisions; this proposal makes no throughput or availability claim.

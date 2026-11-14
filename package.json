@@ -18,6 +18,11 @@
     "typecheck": "tsc --noEmit && tsc -p ui/tsconfig.json --noEmit",
     "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts test/*.test.mjs",
     "test:live": "node --env-file-if-exists=.env --import tsx harness/live.ts",
+    "build:hcu": "node scripts/build-hcu.mjs",
+    "desktop:image": "node --env-file-if-exists=.env.desktop --import tsx scripts/build-desktop.ts",
+    "desktop:host": "node --env-file-if-exists=.env.desktop --import tsx src/desktop/main.ts",
+    "test:desktop": "node --env-file-if-exists=.env.desktop --import tsx harness/desktop-host.ts",
+    "test:desktop:live": "node --env-file-if-exists=.env --import tsx harness/desktop.ts",
     "check": "npm run typecheck && npm test",
     "test:deployment": "node scripts/test-deployment.mjs",
     "test:deployment:live": "node --env-file-if-exists=.env scripts/test-deployment.mjs --live"
