@@ -142,7 +142,10 @@ export function Agents({ caps }: { caps: Capabilities }) {
                 {agent.latest_version.config.instructions ||
                   "No instructions yet."}
               </p>
-              <div className="model-label">
+              <div
+                className="model-label"
+                title={agent.latest_version.config.model}
+              >
                 <span className="tiny-dot" />
                 {agent.latest_version.config.model}
               </div>
