@@ -66,7 +66,7 @@ export async function guestExec(socket: string, path: string, args: string[], in
   throw new Error('Guest operation timed out; reconcile before resuming');
 }
 
-export function vmArguments(directory: string, disk: string, memory: number, extra: string[] = []) {
+export function vmArguments(directory: string, disk: string, memory: number, extra: string[] = [], proxyBridge = false) {
   const escape = (value: string) => value.replaceAll(',', ',,');
   return ['-name', 'pi-desktop', '-machine', 'q35,accel=kvm', '-cpu', 'host', '-smp', '2', '-m', String(memory),
     '-drive', `file=${escape(disk)},format=qcow2,if=virtio,cache=none`,
@@ -75,14 +75,18 @@ export function vmArguments(directory: string, disk: string, memory: number, ext
     '-chardev', `socket,path=${escape(directory)}/qga.sock,server=on,wait=off,id=qga`,
     '-device', 'virtio-serial', '-device', 'virtserialport,chardev=qga,name=org.qemu.guest_agent.0',
     '-serial', `file:${directory}/serial.log`, '-monitor', 'none',
-    '-sandbox', 'on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny',
+    // libslirp calls setsid() before executing the fixed bridge. That syscall
+    // is in QEMU's "privileged" deny group, so online VMs use no_new_privs
+    // instead (set before exec below), while retaining the other filters.
+    '-sandbox', `on,obsolete=deny,elevateprivileges=${proxyBridge ? 'allow' : 'deny'},spawn=${proxyBridge ? 'allow' : 'deny'},resourcecontrol=deny`,
     '-pidfile', directory + '/qemu.pid', ...extra];
 }
 
-export async function startVM(directory: string, disk: string, memory: number, extra: string[] = []) {
+export async function startVM(directory: string, disk: string, memory: number, extra: string[] = [], proxyBridge = false) {
   const log = await open(directory + '/qemu.log', 'a', 0o600);
-  const child = spawn('qemu-system-x86_64', vmArguments(directory, disk, memory, extra),
-    { detached: true, stdio: ['ignore', log.fd, log.fd] });
+  const args = vmArguments(directory, disk, memory, extra, proxyBridge);
+  const child = spawn(proxyBridge ? 'setpriv' : 'qemu-system-x86_64', proxyBridge ? ['--no-new-privs', 'qemu-system-x86_64', ...args] : args,
+    { detached: true, stdio: ['ignore', log.fd, log.fd], env: { PATH: process.env.PATH ?? '/usr/bin:/bin', LANG: 'C.UTF-8' } });
   let failure: Error | undefined;
   child.once('error', error => { failure = error; });
   child.once('exit', (code, signal) => { failure = new Error(`QEMU exited (${code ?? signal}); inspect ${directory}/qemu.log`); });

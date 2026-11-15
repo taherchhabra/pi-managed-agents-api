@@ -23,6 +23,7 @@ PrivateTmp=yes
 # fences HCU, pauses its VMs and reconnects via private Unix sockets on startup.
 KillMode=process
 TimeoutStopSec=120
+TasksMax=256
 
 [Install]
 WantedBy=multi-user.target

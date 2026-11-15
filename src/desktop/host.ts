@@ -9,10 +9,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { ApiError, WorkspaceUnavailable, type ToolImage, type ToolResult } from '../domain.js';
 import { command, guestExec, rpc, startVM } from './qemu.js';
 import { HCU_REVISION } from './hcu-contract.js';
+import { normalizeNetwork, offlineNetwork, type NetworkPolicy } from '../network-policy.js';
+import { EgressProxy } from './egress.js';
 
-interface State { tenant: string; epoch: number; closed: boolean; base: string }
-interface VM { state: State; directory: string; runtime: string; starting?: Promise<void>; closing?: Promise<void>; busy?: Promise<unknown>; preview?: Promise<Buffer>; frameAt?: number }
-export interface HostOptions { root: string; base: string; token: string; memory?: number; maxVMs?: number; runtime?: string }
+interface State { tenant: string; epoch: number; closed: boolean; base: string; network: NetworkPolicy }
+interface VM { state: State; directory: string; runtime: string; starting?: Promise<void>; closing?: Promise<void>; busy?: Promise<unknown>; preview?: Promise<Buffer>; frameAt?: number; egress?: EgressProxy }
+export interface HostOptions { root: string; base: string; token: string; memory?: number; maxVMs?: number; runtime?: string; blockedCIDRs?: string[] }
 const hash = (value: string) => createHash('sha256').update(value).digest();
 const idPattern = /^ses_[0-9a-f-]{36}$/;
 
@@ -39,6 +41,7 @@ export class DesktopHost {
     return guestExec(this.path(vm, 'qga.sock'), '/usr/bin/python3', ['/usr/local/lib/pi-desktop/runner.py', operation, String(epoch)], body);
   }
   async init() {
+    if (process.getuid?.() === 0) throw new Error('Run the desktop host as a non-root user with KVM access');
     await access('/dev/kvm', constants.R_OK | constants.W_OK);
     await access(this.options.base, constants.R_OK);
     for (const name of ['runner.py','tool.py']) this.helpers[name] = await readFile(resolve('deploy/desktop', name), 'utf8');
@@ -65,6 +68,7 @@ export class DesktopHost {
       if (!idPattern.test(name)) continue;
       const directory = join(this.root, name);
       const state = JSON.parse(await readFile(join(directory, 'state.json'), 'utf8')) as State;
+      state.network = normalizeNetwork(state.network);
       const vm: VM = { state, directory, runtime: join(this.runtime, name.slice(4)) };
       this.vms.set(name, vm);
       // Restart never silently continues a model's old in-flight input.
@@ -92,18 +96,21 @@ export class DesktopHost {
         catch { state = 'stopped'; }
       }
     }
-    return { state, platform: 'linux', driver: 'hcu', hcu_revision: HCU_REVISION, network: 'none', width: 1280, height: 800 };
+    return { state, platform: 'linux', driver: 'hcu', hcu_revision: HCU_REVISION, network: vm?.state.network ?? offlineNetwork(),
+      network_activity: vm?.egress?.activity ?? null, width: 1280, height: 800 };
   }
-  async open(id: string, tenant: string, epoch: number, initialized: boolean) {
+  async open(id: string, tenant: string, epoch: number, initialized: boolean, network?: unknown) {
+    const policy = normalizeNetwork(network);
     const work = this.admission.catch(() => {}).then(async () => {
       if ((this.fences.get(id) ?? 0) >= epoch) throw new ApiError(409, 'desktop_fenced', 'This desktop generation was already fenced');
       let vm = this.get(id, tenant);
+      if (vm && JSON.stringify(vm.state.network) !== JSON.stringify(policy)) throw new ApiError(409, 'network_policy_pinned', 'A desktop session keeps its original network policy. Start a new session with the new environment.');
       if (vm && (epoch < vm.state.epoch || (epoch === vm.state.epoch && vm.state.closed))) throw new ApiError(409, 'desktop_fenced', 'This desktop generation was already closed');
       if (vm && epoch === vm.state.epoch && !vm.state.closed) { await vm.starting; return; }
       if (vm && !vm.state.closed) throw new ApiError(409, 'desktop_busy', 'Close the previous desktop generation first');
       if (!vm && initialized) throw new WorkspaceUnavailable();
       if (!vm) {
-        vm = { state: { tenant, epoch, closed: false, base: resolve(this.options.base) }, directory: join(this.root, id), runtime: join(this.runtime, id.slice(4)) };
+        vm = { state: { tenant, epoch, closed: false, base: resolve(this.options.base), network: policy }, directory: join(this.root, id), runtime: join(this.runtime, id.slice(4)) };
         await mkdir(vm.directory, { recursive: true, mode: 0o700 });
         await this.save(vm);
         this.vms.set(id, vm);
@@ -113,6 +120,15 @@ export class DesktopHost {
       current.state = { ...current.state, epoch, closed: false };
       await this.save(current);
       current.starting = (async () => {
+        await mkdir(current.runtime, { recursive: true, mode: 0o700 });
+        const connected = policy.mode !== 'off';
+        const socket = this.path(current, 'egress.sock');
+        if (connected) {
+          await current.egress?.close();
+          current.egress = new EgressProxy(socket, policy, { blockedCIDRs: this.options.blockedCIDRs });
+          await current.egress.start();
+          this.active(id, tenant, epoch);
+        }
         let running = false;
         try { running = !!(await this.qmp(current, 'query-status')); } catch {}
         if (!running) {
@@ -127,8 +143,12 @@ export class DesktopHost {
             if (initialized) throw new WorkspaceUnavailable();
             await command('qemu-img', ['create', '-f', 'qcow2', '-F', 'qcow2', '-b', current.state.base, disk]);
           }
-          await mkdir(current.runtime, { recursive: true, mode: 0o700 });
-          await startVM(current.runtime, disk, this.options.memory ?? 1536, ['-nic', 'none']);
+          // QEMU routes no ordinary guest packets. Only this fixed endpoint
+          // reaches the per-session Unix proxy, which checks every destination.
+          const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+          const bridge = ['/usr/bin/python3', resolve('deploy/desktop/proxy-bridge.py'), socket].map(quote).join(' ');
+          const nic = connected ? `user,model=virtio-net-pci,restrict=on,ipv6=off,guestfwd=tcp:10.0.2.100:3128-cmd:${bridge.replaceAll(',', ',,')}` : 'none';
+          await startVM(current.runtime, disk, this.options.memory ?? 1536, ['-nic', nic], connected);
         } else await this.qmp(current, 'cont');
         const deadline = Date.now() + 90_000;
         while (true) {
@@ -144,7 +164,7 @@ export class DesktopHost {
         await guestExec(this.path(current, 'qga.sock'), '/usr/bin/python3', ['-c',
           "import json,sys,pathlib; a=json.load(sys.stdin); root=pathlib.Path('/usr/local/lib/pi-desktop'); root.mkdir(parents=True,exist_ok=True); [(root.joinpath(n).write_text(a[n]),root.joinpath(n).chmod(0o644)) for n in ('runner.py','tool.py')]"] , this.helpers);
         this.active(id, tenant, epoch);
-        await this.guest(current, 'start', epoch);
+        await this.guest(current, 'start', epoch, { network: policy });
         // Read-only readiness probe: Xfce and RandR can still be settling after
         // their sockets appear. Never admit model input without a valid frame.
         const captureDeadline = Date.now() + 15_000;
@@ -159,6 +179,11 @@ export class DesktopHost {
         }
       })();
       try { await current.starting; }
+      catch (error) {
+        await current.egress?.close();
+        try { await this.qmp(current, 'stop'); } catch {}
+        throw error;
+      }
       finally { current.starting = undefined; }
     });
     this.admission = work;
@@ -219,6 +244,8 @@ export class DesktopHost {
   async close(id: string, epoch: number) {
     if (!idPattern.test(id)) throw new ApiError(400, 'invalid_session', 'Invalid session ID');
     this.fences.set(id, Math.max(epoch, this.fences.get(id) ?? 0));
+    const opening = this.get(id);
+    if (opening && epoch >= opening.state.epoch) await opening.egress?.close();
     await writeFile(join(this.root, `${id}.fence.${epoch}`), '', { mode: 0o600, flag: 'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
     await this.openings.get(id)?.catch(() => {});
     const vm = this.get(id);
@@ -227,6 +254,8 @@ export class DesktopHost {
     vm.state.closed = true;
     vm.state.epoch = Math.max(epoch, vm.state.epoch);
     vm.closing = (async () => {
+      // Revoke proxy connections before waiting for guest input to stop.
+      await vm.egress?.close();
       await this.save(vm);
       await vm.starting?.catch(() => {});
       let status;
@@ -284,7 +313,7 @@ export function buildDesktopHost(host: DesktopHost) {
   app.get('/healthz', async () => ({ status: 'ok', driver: 'hcu', revision: HCU_REVISION }));
   app.get('/sessions/:id', async request => host.status(session(request), tenant(request)));
   app.get('/sessions/:id/frame', async (request, reply) => reply.type('image/jpeg').header('Cache-Control', 'no-store').send(await host.frame(session(request), tenant(request))));
-  app.post('/sessions/:id/open', async request => { const body = owner(request.body); await host.open(session(request), body.tenant, body.epoch, (request.body as any).initialized === true); return { ok: true }; });
+  app.post('/sessions/:id/open', async request => { const body = owner(request.body); await host.open(session(request), body.tenant, body.epoch, (request.body as any).initialized === true, (request.body as any).network); return { ok: true }; });
   app.post('/sessions/:id/tool', async request => { const body = owner(request.body); const { name, args } = request.body as any;
     if (typeof name !== 'string' || !args || Array.isArray(args) || typeof args !== 'object') throw new ApiError(400, 'invalid_tool', 'Tool arguments required');
     return host.tool(session(request), body.tenant, body.epoch, name, args); });

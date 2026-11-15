@@ -10,6 +10,7 @@ import { Store } from './store.js';
 import { installConsole } from './console.js';
 import { modelCatalog } from './catalog.js';
 import type { DesktopClient } from './desktop/client.js';
+import { normalizeNetwork } from './network-policy.js';
 
 declare module 'fastify' { interface FastifyRequest { tenant: string } }
 const object = (properties: Record<string, any>) => Type.Object(properties, { additionalProperties: false });
@@ -57,7 +58,7 @@ export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<C
     app.get('/v1/capabilities', async () => {
       catalog ??= modelCatalog().catch(error => { catalog = undefined; throw error; });
       return { providers: (await catalog).map(provider => ({ ...provider, configured: options.providerConfigured?.[provider.id] ?? !!options.providerKeys?.[provider.id] })),
-        sandbox_image: options.sandboxImage, desktop: { configured: !!options.desktop, platform: 'linux', network: 'none' }, runtime: 'Pi coding agent SDK', sdk_version: '1.5.2' };
+        sandbox_image: options.sandboxImage, desktop: { configured: !!options.desktop, platform: 'linux', network_modes: ['off','internet','allowlist'], network_protocols: ['http','https'] }, runtime: 'Pi coding agent SDK', sdk_version: '1.5.2' };
     });
 
     const mutation = async (request: FastifyRequest, fn: Parameters<Store['mutate']>[4]) => {
@@ -82,10 +83,13 @@ export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<C
     });
     app.get('/v1/environment-templates', async request => ({ data: await store.list(request.tenant, 'environment_templates') }));
     app.get('/v1/environment-templates/:environment', { schema: { params: object({ environment: id }) } }, request => store.getEnvironment(request.tenant, params(request).environment!));
-    app.post('/v1/environment-templates', { schema: { body: object({ name, type: Type.Union([Type.Literal('none'), Type.Literal('managed'), Type.Literal('desktop')]) }) } }, async (request, reply) => {
-      const body = request.body as { name: string; type: string };
+    app.post('/v1/environment-templates', { schema: { body: object({ name, type: Type.Union([Type.Literal('none'), Type.Literal('managed'), Type.Literal('desktop')]),
+      network: Type.Optional(object({ mode: Type.Union([Type.Literal('off'), Type.Literal('internet'), Type.Literal('allowlist')]),
+        allowed_domains: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 253 }), { maxItems: 100 })) })) }) } }, async (request, reply) => {
+      const body = request.body as { name: string; type: string; network?: unknown };
       if (body.type === 'desktop' && !options.desktop) throw new ApiError(503, 'desktop_unavailable', 'Configure a desktop host before creating a Linux desktop environment');
-      const result = await mutation(request, tx => store.createEnvironment(tx, request.tenant, body.name, body.type, options.sandboxImage));
+      const policy = normalizeNetwork(body.network);
+      const result = await mutation(request, tx => store.createEnvironment(tx, request.tenant, body.name, body.type, options.sandboxImage, policy));
       return reply.code(result.status).send(result.body);
     });
     app.get('/v1/sessions', async request => ({ data: await store.list(request.tenant, 'sessions') }));
@@ -100,12 +104,15 @@ export function buildApi(store: Store, artifacts: ArtifactStore, options: Pick<C
       if (session.environment_type !== 'desktop') throw new ApiError(404, 'not_found', 'This session has no desktop');
       if (session.status === 'archived') throw new ApiError(410, 'desktop_archived', 'This desktop has been archived. Saved screenshots remain available in the event log.');
       if (!options.desktop) throw new ApiError(503, 'desktop_unavailable', 'Desktop host is not configured');
-      return options.desktop;
+      return { desktop: options.desktop, session };
     };
-    app.get('/v1/sessions/:session/desktop', { schema: { params: sessionParams } }, async request =>
-      (await desktopSession(request)).status(params(request).session!, request.tenant));
+    app.get('/v1/sessions/:session/desktop', { schema: { params: sessionParams } }, async request => {
+      const { desktop, session } = await desktopSession(request);
+      return { ...await desktop.status(params(request).session!, request.tenant), network: session.environment_network };
+    });
     app.get('/v1/sessions/:session/desktop/frame', { schema: { params: sessionParams } }, async (request, reply) => {
-      const bytes = await (await desktopSession(request)).frame(params(request).session!, request.tenant);
+      const { desktop } = await desktopSession(request);
+      const bytes = await desktop.frame(params(request).session!, request.tenant);
       return reply.type('image/jpeg').header('Cache-Control', 'no-store').send(bytes);
     });
     app.get('/v1/sessions/:session/screenshots/:screenshot', { schema: { params: object({ session: id, screenshot: id }) } }, async (request, reply) => {

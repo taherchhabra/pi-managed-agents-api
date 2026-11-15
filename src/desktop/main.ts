@@ -11,7 +11,8 @@ const positive = (name: string, fallback: number, max: number) => {
 const host = new DesktopHost({ root: resolve(process.env.DESKTOP_DATA_DIR ?? '.data/desktop/sessions'),
   base: resolve(process.env.DESKTOP_BASE_IMAGE ?? '.data/desktop/ubuntu-hcu.qcow2'), token,
   memory: positive('DESKTOP_MEMORY_MB', 1536, 16384), maxVMs: positive('DESKTOP_MAX_VMS', 2, 100),
-  runtime: process.env.DESKTOP_RUNTIME_DIR });
+  runtime: process.env.DESKTOP_RUNTIME_DIR,
+  blockedCIDRs: (process.env.DESKTOP_EGRESS_BLOCKED_CIDRS ?? '').split(',').map(value => value.trim()).filter(Boolean) });
 await host.init();
 const app = buildDesktopHost(host);
 await app.listen({ host: process.env.DESKTOP_BIND ?? '127.0.0.1', port: positive('DESKTOP_PORT', 8090, 65535) });

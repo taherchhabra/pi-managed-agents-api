@@ -1,0 +1,14 @@
+.network-editor { margin-top: 20px; padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-muted); }
+.network-editor .field:last-of-type { margin-bottom: 10px; }
+.network-editor .field-hint { margin-bottom: 0; line-height: 1.6; }
+.network-editor .field textarea { min-height: 96px; height: 104px; font-family: inherit; resize: vertical; }
+.network-editor small { color: var(--muted); font-weight: 400; line-height: 1.6; }
+.network-summary { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
+.network-summary > svg { flex: 0 0 auto; margin-top: 3px; }
+.network-summary.internet, .network-summary.allowlist { color: #1756a9; border-color: #bdd4f1; background: #f0f6ff; }
+.network-summary p { margin: 4px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+
+.modal:has(.workspace-choices) { width: min(760px, calc(100vw - 32px)); }
+.choice-grid.workspace-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.workspace-choices .choice { padding: 16px; }
+@media (max-width: 600px) { .choice-grid.workspace-choices { grid-template-columns: 1fr; } }

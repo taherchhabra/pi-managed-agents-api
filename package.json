@@ -25,7 +25,9 @@
     "test:desktop:live": "node --env-file-if-exists=.env --import tsx harness/desktop.ts",
     "check": "npm run typecheck && npm test",
     "test:deployment": "node scripts/test-deployment.mjs",
-    "test:deployment:live": "node --env-file-if-exists=.env scripts/test-deployment.mjs --live"
+    "test:deployment:live": "node --env-file-if-exists=.env scripts/test-deployment.mjs --live",
+    "test:desktop:network": "node --env-file-if-exists=.env.desktop --import tsx harness/desktop-network.ts",
+    "test:desktop:web": "node --env-file-if-exists=.env --import tsx harness/desktop-web.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.5.2",

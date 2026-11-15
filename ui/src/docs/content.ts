@@ -135,7 +135,7 @@ export const docPages: DocPage[] = [
       {
         "id": "environments",
         "title": "Environments",
-        "body": "An **environment template** chooses how work runs. **Managed sandbox** gives a session Bash, Python, and a filesystem when those tools are enabled on the agent. **Linux desktop** provides persistent Ubuntu/Xfce applications with HCU accessibility and screen control; see [Linux desktops & HCU](#/docs/desktop) for setup. **Conversation only** keeps model context without tool execution and requires an empty tools list.\n\nCreate templates in [Environments](#/environments), or let **Test agent** create one when you choose a workspace type."
+        "body": "An **environment template** chooses how work runs. **Managed sandbox** gives a session Bash, Python, and a filesystem when those tools are enabled on the agent. **Linux desktop** provides persistent Ubuntu/Xfce applications with HCU accessibility and screen control. Choose Off, Internet, or a domain allowlist for HTTP/HTTPS; see [Linux desktops & HCU](#/docs/desktop) for setup. **Conversation only** keeps model context without tool execution and requires an empty tools list.\n\nCreate templates in [Environments](#/environments), or let **Test agent** create one when you choose a workspace type."
       },
       {
         "id": "sessions",
@@ -213,7 +213,7 @@ export const docPages: DocPage[] = [
       {
         "id": "troubleshoot",
         "title": "Troubleshoot your first task",
-        "body": "**The provider is not configured.** Add its API key on the server and restart the API and worker. [Local setup](#/docs/local-setup?section=credentials) shows the settings.\n\n**The model is unavailable or returns an error.** Check the provider, model ID, and account access in **Connections**. A configured key alone does not verify model access.\n\n**The run stays queued.** Check earlier runs in the session, then check that a worker is running. Local development starts the API and worker together.\n\n**There are no artifacts.** Confirm that the run completed and the agent saved files under `outputs/`. File tools need a managed environment.\n\n**A command cannot reach the internet.** Managed sandboxes have networking disabled. Use available packages or ask the operator for a custom image.\n\n**A workspace is missing.** Start a new session, or have the operator restore the existing session's volume before resuming."
+        "body": "**The provider is not configured.** Add its API key on the server and restart the API and worker. [Local setup](#/docs/local-setup?section=credentials) shows the settings.\n\n**The model is unavailable or returns an error.** Check the provider, model ID, and account access in **Connections**. A configured key alone does not verify model access.\n\n**The run stays queued.** Check earlier runs in the session, then check that a worker is running. Local development starts the API and worker together.\n\n**There are no artifacts.** Confirm that the run completed and the agent saved files under `outputs/`. File tools need a managed environment.\n\n**A command cannot reach the internet.** Docker sandboxes have networking disabled. For Linux desktops, choose Internet or Allowlist when creating the environment; existing offline sessions stay offline. Connected desktops support HTTP/HTTPS through their configured proxy. A 403 means the destination is blocked; allowlist pages may need additional domains for redirects and assets. See [Desktop network access](#/docs/desktop?section=network-access).\n\n**A workspace is missing.** Start a new session, or have the operator restore the existing session's volume before resuming."
       }
     ]
   },
@@ -308,7 +308,7 @@ export const docPages: DocPage[] = [
       return { id: index ? heading!.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-$/, '') : 'overview',
         title: index ? heading! : 'A desktop for each session',
         body: lines.join('\n').replace(/```mermaid[\s\S]*?```/, 'The console and your application use the Agents API. The Pi worker calls the model and sends desktop operations to the desktop host. The host manages an isolated QEMU/KVM VM; HCU operates the applications inside it.')
-          .split('\n').map(line => line.startsWith('|') ? (line.includes('---') || line.includes('Endpoint') ? '' : '- ' + line.split('|').slice(1, -1).map(value => value.trim()).join(' — ')) : line).join('\n') };
+          .split('\n').map(line => line.startsWith('|') ? (line.includes('---') || line.includes('Endpoint') || line.startsWith('| Mode |') ? '' : '- ' + line.split('|').slice(1, -1).map(value => value.trim()).join(' — ')) : line).join('\n') };
     }),
   },
 

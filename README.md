@@ -18,13 +18,17 @@ Define an agent, give it a workspace, and send it a task. Pi handles the model a
 
 Choose **Desktop assistant**, select a vision model, and start a **Linux desktop** session. Pi uses [Microsoft HCU](https://github.com/microsoft/Hybrid-Computer-Use) to inspect accessibility controls and screenshots, then operate real applications inside a QEMU/KVM VM. The console shows a live preview and saves the model’s observations alongside its tool calls.
 
-Apps and files stay with the session between runs. A desktop can run on a separate KVM server while your API stays on a VPS. Linux is supported first; networking is disabled, and the preview is read-only. Windows and macOS providers are not implemented.
+Apps and files stay with the session between runs. A desktop can run on a separate KVM server while your API stays on a VPS. Linux is supported first, with **Off, Internet, or domain-allowlist** networking for desktop sessions. Internet access uses an HTTP/HTTPS proxy; private networks and cloud metadata are blocked. The preview is read-only. Windows and macOS providers are not implemented.
 
 Open **Docs → Linux desktops & HCU** in the app for setup and the API guide. The same guide is in [docs/desktop.md](docs/desktop.md).
 
 [![A real DeepSeek agent continuing work in a persistent Linux desktop through HCU](docs/images/session-desktop.jpg)](docs/images/desktop-preview.jpg)
 
 *The agent created a note in Mousepad, saved it through the GUI, then resumed the same desktop and appended a second line. Screenshots and the saved file are available in the session.*
+
+![Desktop environment with Internet access selected](docs/images/desktop-network.jpg)
+
+*Choose a network policy for each new desktop session. The real DeepSeek browser test loaded an allowed website and verified that an unapproved domain was blocked. See the [browser result](docs/images/desktop-browser-preview.jpg) and [in-app guide screenshot](docs/images/desktop-network-docs.jpg).*
 
 ## How it compares
 
@@ -37,7 +41,7 @@ Vendor documentation checked on **14 November 2026**; the Pi column reflects the
 | Model choices | OpenAI, Anthropic, and OpenRouter catalogs; includes DeepSeek | [OpenAI models supported by the API](https://developers.openai.com/api/docs/guides/agents-api/configuration) | [Claude models](https://platform.claude.com/docs/en/managed-agents/overview); self-hosted service also supports [a choice of inference backend](https://platform.claude.com/docs/en/managed-agents/self-hosted) |
 | Reusable agents | Immutable versions; sessions pin a version | [Saved or inline configuration; sessions copy saved settings](https://developers.openai.com/api/docs/guides/agents-api/configuration) | [Versioned agent definitions](https://platform.claude.com/docs/en/managed-agents/agent-setup) |
 | Sessions and follow-up messages | **Yes.** Persistent context, queued runs, and follow-ups; five-minute limit per run | [Persistent sessions with asynchronous turns and follow-ups](https://developers.openai.com/api/docs/guides/agents-api/sessions) | [Stateful sessions with asynchronous user events](https://platform.claude.com/docs/en/managed-agents/overview) |
-| Code execution and workspace | Docker workspaces or optional Linux desktops on QEMU/KVM with HCU; Bash, Python and persistent files; networking disabled | [Hosted, self-hosted, or no environment](https://developers.openai.com/api/docs/guides/agents-api/architecture) | [Cloud sandboxes](https://platform.claude.com/docs/en/managed-agents/environments) or [self-hosted execution](https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes) |
+| Code execution and workspace | Docker workspaces or optional Linux desktops on QEMU/KVM with HCU; Bash, Python and persistent files; desktop HTTP/HTTPS with Off / Internet / domain allowlist, Docker networking off | [Hosted, self-hosted, or no environment](https://developers.openai.com/api/docs/guides/agents-api/architecture) | [Cloud sandboxes](https://platform.claude.com/docs/en/managed-agents/environments) or [self-hosted execution](https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes) |
 | File inputs and outputs | Downloads of published `outputs/` snapshots; **no input-upload API yet** | [Uploads and published artifacts for hosted environments; self-hosted files use your infrastructure](https://developers.openai.com/api/docs/guides/agents-api/environments/files) | [Upload, mount, and download session files](https://platform.claude.com/docs/en/managed-agents/files) |
 | Streaming and history | Saved lifecycle/tool/result events over resumable SSE; **no token deltas yet** | [Live SSE with text deltas; saved items and turns for history](https://developers.openai.com/api/docs/guides/agents-api/sessions/events) | [Live text previews plus persisted completed events](https://platform.claude.com/docs/en/managed-agents/event-deltas) |
 | Console and logs | Agent testing, session inspector, tool calls, log export, artifacts, and built-in docs | [Dashboard session logs, turn traces, and usage](https://developers.openai.com/api/docs/guides/agents-api/observability) | [Console session viewer, tool inspection, event export, and usage](https://platform.claude.com/docs/en/managed-agents/session-observability) |

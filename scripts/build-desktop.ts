@@ -68,7 +68,7 @@ const userData = {
     files('/home/agent/.config/autostart/pi-display.desktop', '[Desktop Entry]\nType=Application\nName=Desktop display\nExec=sh -c "xrandr -s 1280x800; xset s off; xset -dpms; xfconf-query -c xfce4-session -p /general/SaveOnExit -n -t bool -s false"\n', 'agent:agent'),
     files('/home/agent/.config/autostart/ibus.desktop', '[Desktop Entry]\nType=Application\nName=Input method\nExec=ibus-daemon -drx\n', 'agent:agent'),
     files('/etc/polkit-1/rules.d/00-pi-desktop.rules', 'polkit.addRule(function(action, subject) { if (subject.user === "agent") return polkit.Result.NO; });\n'),
-    files('/workspace/README.txt', 'Your private Linux desktop. Save deliverables under /workspace/outputs. Internet access is disabled.\n', 'agent:agent'),
+    files('/workspace/README.txt', 'Your private Linux desktop. Save deliverables under /workspace/outputs. Network access follows the policy shown in your session console.\n', 'agent:agent'),
   ],
   runcmd: [
     ['mkdir', '-p', '/usr/local/lib/pi-desktop', '/usr/local/share/hcu', '/workspace/outputs'],

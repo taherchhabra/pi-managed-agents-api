@@ -91,7 +91,7 @@ Usage is the difference in Pi session statistics across a successful run. It inc
 | Bash command | 30 seconds; returned output truncated at 64 KiB |
 | File read/write | 64 KiB UTF-8, paths confined to `/workspace` |
 | Docker sandbox | Non-root, no network, read-only root, no added capabilities, 1 CPU, 512 MiB RAM, 128 processes |
-| Desktop VM | Ubuntu/Xfce, no network, 2 vCPUs, 1536 MiB RAM by default; paused between runs |
+| Desktop VM | Ubuntu/Xfce, Off / Internet / domain-allowlist HTTP/HTTPS, 2 vCPUs, 1536 MiB RAM by default; paused between runs |
 | Temporary files | 64 MiB `/tmp` |
 | Artifact export | 20 regular files, 5 MiB each, 20 MiB total |
 | Session checkpoint | 16 MiB |

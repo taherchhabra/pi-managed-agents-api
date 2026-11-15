@@ -1,4 +1,5 @@
 import { DesktopPanel, ScreenshotEvidence } from "./Desktop";
+import { networkLabel } from "./Network";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Markdown from "react-markdown";
 import {
@@ -265,10 +266,11 @@ export function SessionTable({
               </td>
               <td>
                 <span>
-                  {session.environment_type === "managed"
+                  {session.environment_type === "desktop" ? "Linux desktop" : session.environment_type === "managed"
                     ? "Managed sandbox"
                     : "Conversation"}
                 </span>
+                {session.environment_type === "desktop" && <small>{networkLabel(session.environment_network)}</small>}
               </td>
               <td className="nowrap subtle">{date(session.created_at)}</td>
               <td>

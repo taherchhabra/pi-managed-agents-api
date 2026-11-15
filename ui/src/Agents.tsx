@@ -15,6 +15,7 @@ import {
   MousePointer2,
 } from "lucide-react";
 import { date, navigate, shortId, useMutation, useResource } from "./client";
+import { NetworkEditor, NetworkSummary, networkLabel, networkPolicy, offlineDraft, sameNetwork } from "./Network";
 import {
   CopyButton,
   Empty,
@@ -256,6 +257,7 @@ export function StartSession({
     version ??
     agent.latest_version;
   const [environment, setEnvironment] = useState("");
+  const [network, setNetwork] = useState(offlineDraft);
   const needsDesktop = selected.config.tools.some(tool => tool === "AX" || tool === "GUI");
   const [newType, setNewType] = useState<Environment["type"]>(
     needsDesktop ? "desktop" : selected.config.tools.length ? "managed" : "none",
@@ -280,16 +282,18 @@ export function StartSession({
     try {
       let id = environment;
       if (!id) {
-        const existing = compatible.find((item) => item.type === newType);
+        const policy = networkPolicy(network);
+        const existing = compatible.find((item) => item.type === newType && (newType !== "desktop" || sameNetwork(item.network, policy)));
         id =
           existing?.id ??
           (
             await mutate<Environment>("/v1/environment-templates", {
               name:
-                newType === "desktop" ? "Linux desktop" : newType === "managed"
+                newType === "desktop" ? `Linux desktop · ${networkLabel(policy)}` : newType === "managed"
                   ? "Managed workspace"
                   : "Conversation only",
               type: newType,
+              ...(newType === "desktop" ? { network: policy } : {}),
             })
           ).id;
         setEnvironment(id);
@@ -346,13 +350,13 @@ export function StartSession({
             {compatible.map((item) => (
               <option value={item.id} key={item.id}>
                 {item.name} ·{" "}
-                {item.type === "desktop" ? "Linux desktop" : item.type === "managed" ? "Managed sandbox" : "No sandbox"}
+                {item.type === "desktop" ? `Linux desktop · ${networkLabel(item.network)}` : item.type === "managed" ? "Managed sandbox" : "No sandbox"}
               </option>
             ))}
           </select>
         </label>
         {!environment && (
-          <div className="choice-grid">
+          <div className="choice-grid workspace-choices">
             <label className={`choice ${newType === "desktop" ? "selected" : ""} ${!caps.desktop.configured ? "disabled" : ""}`}>
               <input type="radio" name="workspace" checked={newType === "desktop"} disabled={!caps.desktop.configured} onChange={() => setNewType("desktop")} />
               <Monitor size={21} /><strong>Linux desktop</strong><small>{caps.desktop.configured ? "A private VM with persistent apps, HCU, and a live preview." : "Configure a desktop host to enable this environment."}</small>
@@ -394,6 +398,8 @@ export function StartSession({
             </label>
           </div>
         )}
+        {!environment && newType === "desktop" && <NetworkEditor value={network} onChange={setNetwork} />}
+        {environment && compatible.find(item => item.id === environment)?.type === "desktop" && <NetworkSummary network={compatible.find(item => item.id === environment)?.network} />}
         <p className="field-hint">
           Sessions pin the selected version and environment. Send a message
           after creating the session to call the model.

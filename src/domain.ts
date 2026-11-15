@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { NetworkPolicy } from './network-policy.js';
 
 export const SDK_VERSION = '1.5.2';
 export type ToolName = 'bash' | 'read_file' | 'write_file' | 'AX' | 'GUI';
@@ -25,7 +26,7 @@ export interface Job {
   epoch: number;
   owner: string;
   config: AgentConfig;
-  environment: { type: EnvironmentType; image: string | null };
+  environment: { type: EnvironmentType; image: string | null; network?: NetworkPolicy };
   checkpoint: Checkpoint | null;
   workspace_initialized: boolean;
 }

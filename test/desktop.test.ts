@@ -7,7 +7,7 @@ import { fixture, modelFixture, tokenB } from './fixture.js';
 class PreviewHost extends DesktopClient {
   calls = 0;
   constructor() { super('http://unused.invalid', 'test-only'); }
-  override async status() { this.calls++; return { state: 'paused' as const, platform: 'linux' as const, network: 'none' as const, width: 1280, height: 800 }; }
+  override async status() { this.calls++; return { state: 'paused' as const, platform: 'linux' as const, network: { mode: 'off' as const, allowed_domains: [] }, width: 1280, height: 800 }; }
   override async frame() { this.calls++; return Buffer.from([255,216,255,217]); }
 }
 

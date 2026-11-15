@@ -28,6 +28,7 @@ import {
   Status,
 } from "./components";
 import type { Capabilities, Environment } from "./types";
+import { NetworkEditor, NetworkSummary, networkLabel, networkPolicy, offlineDraft } from "./Network";
 
 export function Environments({ caps }: { caps: Capabilities }) {
   const mutate = useMutation();
@@ -37,6 +38,7 @@ export function Environments({ caps }: { caps: Capabilities }) {
   const [create, setCreate] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<Environment["type"]>("managed");
+  const [network, setNetwork] = useState(offlineDraft);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<Environment>();
@@ -45,9 +47,10 @@ export function Environments({ caps }: { caps: Capabilities }) {
     setBusy(true);
     setError("");
     try {
-      await mutate("/v1/environment-templates", { name: name.trim(), type });
+      await mutate("/v1/environment-templates", { name: name.trim(), type, ...(type === "desktop" ? { network: networkPolicy(network) } : {}) });
       setCreate(false);
       setName("");
+      setNetwork(offlineDraft);
       resource.reload();
     } catch (error) {
       setError((error as Error).message);
@@ -133,7 +136,7 @@ export function Environments({ caps }: { caps: Capabilities }) {
                 : "Conversation only"}
             </p>
             <div className="environment-specs">
-              {environment.type === "desktop" ? (<><span><Monitor size={14} />Ubuntu / Xfce</span><span><HardDrive size={14} />Persistent VM</span><span><GlobeLock size={14} />No network</span></>) : environment.type === "managed" ? (
+              {environment.type === "desktop" ? (<><span><Monitor size={14} />Ubuntu / Xfce</span><span><HardDrive size={14} />Persistent VM</span><span><GlobeLock size={14} />{networkLabel(environment.network)}</span></>) : environment.type === "managed" ? (
                 <>
                   <span>
                     <Cpu size={14} />1 CPU
@@ -192,7 +195,7 @@ export function Environments({ caps }: { caps: Capabilities }) {
                 placeholder="e.g. Python workspace"
               />
             </label>
-            <div className="choice-grid">
+            <div className="choice-grid workspace-choices">
               <label className={`choice ${type === "desktop" ? "selected" : ""} ${!caps.desktop.configured ? "disabled" : ""}`}>
                 <input name="environment-type" type="radio" checked={type === "desktop"} disabled={!caps.desktop.configured} onChange={() => setType("desktop")} />
                 <Monitor size={22} /><strong>Linux desktop</strong><small>{caps.desktop.configured ? "Ubuntu, Xfce, and HCU in a private VM. Apps and files stay with the session." : "Set up a desktop host to enable Linux VMs."}</small>
@@ -229,6 +232,7 @@ export function Environments({ caps }: { caps: Capabilities }) {
               </label>
             </div>
             {type === "desktop" && <p className="field-hint">Uses QEMU/KVM with HCU for accessibility and screen control. <DocLink page="desktop">Desktop setup guide</DocLink></p>}
+            {type === "desktop" && <NetworkEditor value={network} onChange={setNetwork} />}
             {type === "managed" && (
               <p className="field-hint">
                 Operator image: <code>{caps.sandbox_image}</code>
@@ -268,10 +272,11 @@ export function Environments({ caps }: { caps: Capabilities }) {
             <code>{detail.id}</code>
             <CopyButton value={detail.id} />
           </div>
+          {detail.type === "desktop" && <NetworkSummary network={detail.network} />}
           <JsonBlock
             value={{
               type: detail.type,
-              ...(detail.type === "desktop" ? { platform: "linux", hypervisor: "qemu-kvm", driver: "hcu", network: "none", workspace: "/workspace", lifecycle: "paused between runs" } : detail.type === "managed"
+              ...(detail.type === "desktop" ? { platform: "linux", hypervisor: "qemu-kvm", driver: "hcu", network: detail.network, workspace: "/workspace", lifecycle: "paused between runs" } : detail.type === "managed"
                 ? {
                     image: detail.image,
                     network: "none",

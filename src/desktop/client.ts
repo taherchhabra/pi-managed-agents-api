@@ -1,9 +1,11 @@
 import { ApiError, WorkspaceUnavailable, type Job, type ToolResult } from '../domain.js';
 import type { Sandbox, SandboxProvider } from '../sandbox.js';
+import type { NetworkPolicy } from '../network-policy.js';
 
 export interface DesktopStatus {
   state: 'not_started' | 'starting' | 'running' | 'paused' | 'stopped';
-  platform: 'linux'; network: 'none'; width: number; height: number;
+  platform: 'linux'; network: NetworkPolicy; width: number; height: number;
+  network_activity?: { allowed: number; blocked: number; last_denied: string } | null;
 }
 
 // Only the control plane knows this credential. Guests and browser clients
@@ -34,7 +36,7 @@ export class DesktopClient implements SandboxProvider {
   async open(job: Job, signal: AbortSignal): Promise<Sandbox> {
     const path = `/sessions/${job.session_id}`;
     const owner = { tenant: job.tenant_id, epoch: job.epoch };
-    try { await this.request(path + '/open', { ...owner, initialized: job.workspace_initialized }, signal); }
+    try { await this.request(path + '/open', { ...owner, initialized: job.workspace_initialized, network: job.environment.network }, signal); }
     catch (error) { await this.stopGeneration(job.session_id, job.epoch); throw error; }
     let closed: Promise<void> | undefined;
     const close = () => closed ??= this.request(path + '/close', owner).then(() => {}).catch(error => { closed = undefined; throw error; });

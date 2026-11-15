@@ -4,8 +4,9 @@ import { api, date } from './client';
 import { ErrorBox, Modal } from './components';
 import type { Event, Session } from './types';
 import './desktop.css';
+import { NetworkSummary } from './Network';
 
-interface DesktopState { state: 'not_started' | 'starting' | 'running' | 'paused' | 'stopped' }
+interface DesktopState { state: 'not_started' | 'starting' | 'running' | 'paused' | 'stopped'; network_activity?: { allowed: number; blocked: number; last_denied: string } | null }
 export function ScreenshotEvidence({ event }: { event: Event }) {
   return <div className="screenshot-evidence">{event.data.images?.map((image: { id: string; url: string; width: number; height: number }) =>
     <a key={image.id} href={image.url} target="_blank" rel="noreferrer" title="Open full screenshot">
@@ -22,6 +23,7 @@ export function DesktopPanel({ session, events }: { session: Session; events: Ev
   const [revision, setRevision] = useState(0);
   const [live, setLive] = useState(true);
   const [expanded, setExpanded] = useState(false);
+  const [activity, setActivity] = useState<DesktopState['network_activity']>();
   const screenshots = events.filter(event => event.data.images?.length);
   useEffect(() => {
     if (session.status === 'archived') return;
@@ -34,6 +36,7 @@ export function DesktopPanel({ session, events }: { session: Session; events: Ev
         const status = await api<DesktopState>(`/v1/sessions/${session.id}/desktop`);
         if (controller.signal.aborted) return;
         setState(status.state);
+        setActivity(status.network_activity);
         if (['running', 'paused'].includes(status.state)) {
           const response = await fetch(`/v1/sessions/${session.id}/desktop/frame`, { signal: controller.signal, credentials: 'same-origin', cache: 'no-store' });
           if (response.status === 401) { window.dispatchEvent(new CustomEvent('pi:unauthorized')); return; }
@@ -65,7 +68,9 @@ export function DesktopPanel({ session, events }: { session: Session; events: Ev
       <button className="icon-button" title="Expand desktop" aria-label="Expand desktop" disabled={!image || session.status === 'archived'} onClick={() => setExpanded(true)}><Expand size={16} /></button>
     </div></div>
     <ErrorBox error={error} retry={() => setRevision(value => value + 1)} />
-    <p className="desktop-note"><ShieldCheck size={15} />{state === 'paused' ? 'Apps stay open. Sending another task resumes this desktop.' : 'Private VM · no internet · preview updates every 3 seconds'}{!live && ' · Preview updates paused'}</p>
+    <p className="desktop-note"><ShieldCheck size={15} />{state === 'paused' ? 'Apps stay open. Sending another task resumes this desktop.' : 'Private VM · preview updates every 3 seconds'}{!live && ' · Preview updates paused'}</p>
+    <NetworkSummary network={session.environment_network} />
+    {activity && <p className="field-hint">This run: {activity.allowed} proxy requests allowed · {activity.blocked} blocked{activity.last_denied && <> · Last blocked: <code>{activity.last_denied}</code></>}</p>}
     <div className="desktop-history-heading"><h3><Camera size={16} />Agent observations</h3><span className="count">{screenshots.length}</span></div>
     <p className="field-hint">The screenshots the model actually received, saved with each tool result.</p>
     {!screenshots.length ? <div className="desktop-empty-history">GUI screenshots and visual AX observations will appear here.</div> : <div className="desktop-history">{[...screenshots].reverse().map(event => <article key={event.id}><div><strong>Observation {screenshots.indexOf(event) + 1}</strong><span>{date(event.created_at)}</span></div><ScreenshotEvidence event={event} /></article>)}</div>}

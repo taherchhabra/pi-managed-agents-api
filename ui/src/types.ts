@@ -20,11 +20,13 @@ export interface Agent {
   versions?: Version[];
   session_count: number;
 }
+export interface NetworkPolicy { mode: "off" | "internet" | "allowlist"; allowed_domains: string[] }
 export interface Environment {
   id: string;
   name: string;
   type: "none" | "managed" | "desktop";
   image: string | null;
+  network: NetworkPolicy;
   created_at: string;
 }
 export type RunStatus =
@@ -58,6 +60,7 @@ export interface Session {
   environment_template_id: string;
   environment_name: string;
   environment_type: "managed" | "none" | "desktop";
+  environment_network: NetworkPolicy;
   created_at: string;
   event_seq: string;
   config: AgentConfig;
@@ -93,5 +96,5 @@ export interface Capabilities {
   }[];
   sandbox_image: string;
   sdk_version: string;
-  desktop: { configured: boolean; platform: string; network: string };
+  desktop: { configured: boolean; platform: string; network_modes: NetworkPolicy["mode"][]; network_protocols: string[] };
 }
